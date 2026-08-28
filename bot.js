@@ -45,8 +45,27 @@ http.createServer((req, res) => {
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || '';
 const TELEGRAM_API = 'https://api.telegram.org/bot' + TELEGRAM_TOKEN;
 const AUTHORIZED_USER_ID = parseInt(process.env.AUTHORIZED_USER_ID || '0', 10);
-const RH_ACCOUNT = process.env.RH_ACCOUNT || '';
+let RH_ACCOUNT = process.env.RH_ACCOUNT || '';
 const RH_TOKEN = process.env.ROBINHOOD_TOKEN || '';
+
+// Automatically discovers and binds Dylan's active agentic brokerage account
+async function resolveAccount() {
+  if (RH_ACCOUNT) return RH_ACCOUNT;
+  try {
+    const acc = await callRobinhood('get_accounts', {});
+    if (acc && acc.data && acc.data.accounts) {
+      const target = acc.data.accounts.find(a => a.agentic_allowed) || acc.data.accounts[0];
+      if (target) {
+        RH_ACCOUNT = target.account_number;
+        console.log('[BROKER] Automatically resolved agentic account: ••••' + RH_ACCOUNT.slice(-4));
+        return RH_ACCOUNT;
+      }
+    }
+  } catch (e) {
+    console.error('[BROKER] Failed to auto-resolve account:', e.message);
+  }
+  return RH_ACCOUNT;
+}
 
 // Security: Hard Capital Safety Limits (Circuit Breakers)
 const MAX_SINGLE_ORDER_USD = 50.00;
@@ -103,11 +122,17 @@ async function sendMessage(chatId, text, replyMarkup) {
 }
 
 // Robinhood Direct JSON-RPC Broker Interface
-async function callRobinhood(toolName, args) {
+async function callRobinhood(toolName, args = {}) {
   if (!RH_TOKEN) {
     console.error('Security Warning: RH_TOKEN is missing from environment.');
     return { error: { message: 'Broker credentials missing from server configuration.' } };
   }
+
+  // Automatically resolve account_number if not yet resolved or if empty
+  if (toolName !== 'get_accounts' && args && (!args.account_number || args.account_number === '')) {
+    args.account_number = await resolveAccount();
+  }
+
   try {
     const res = await fetch('https://agent.robinhood.com/mcp/trading', {
       method: 'POST',
@@ -130,7 +155,18 @@ async function callRobinhood(toolName, args) {
     if (!line) throw new Error('Broker API returned non-SSE response (HTTP ' + res.status + ')');
     const json = JSON.parse(line.replace('data: ', ''));
     if (json.error) throw new Error(json.error.message || 'Broker RPC error');
-    return JSON.parse(json.result.content[0].text);
+    if (json.result && json.result.isError) {
+      const errMsg = (json.result.content && json.result.content[0] && json.result.content[0].text) 
+        ? json.result.content[0].text 
+        : 'Broker tool execution error';
+      throw new Error(errMsg);
+    }
+    const rawText = (json.result && json.result.content && json.result.content[0]) ? json.result.content[0].text : '{}';
+    try {
+      return JSON.parse(rawText);
+    } catch (e) {
+      return { raw: rawText };
+    }
   } catch (err) {
     console.error('Robinhood RPC error (' + toolName + '):', err.message);
     return { error: { message: err.message } };
@@ -1520,7 +1556,7 @@ async function checkBackgroundOpportunityAlerts() {
 let offset = 0;
 async function startPolling() {
   console.log('🛡️ Dylan AI Trading Agent online with Liquidity Filter (>= 1000 Vol) & RSI Engine...');
-  
+  await resolveAccount();
   await pollRobinhoodBackground();
   setInterval(pollRobinhoodBackground, 60000);
 
