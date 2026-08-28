@@ -121,6 +121,24 @@ async function sendMessage(chatId, text, replyMarkup) {
   }
 }
 
+const TOOLS_REQUIRING_ACCOUNT = new Set([
+  'get_portfolio',
+  'get_equity_positions',
+  'get_equity_orders',
+  'place_equity_order',
+  'cancel_equity_order',
+  'get_realized_pnl',
+  'get_pnl_trade_history',
+  'get_equity_tax_lots',
+  'get_limited_margin_upgrade_info',
+  'get_option_positions',
+  'get_option_orders',
+  'place_option_order',
+  'cancel_option_order',
+  'review_equity_order',
+  'review_option_order'
+]);
+
 // Robinhood Direct JSON-RPC Broker Interface
 async function callRobinhood(toolName, args = {}) {
   if (!RH_TOKEN) {
@@ -128,8 +146,8 @@ async function callRobinhood(toolName, args = {}) {
     return { error: { message: 'Broker credentials missing from server configuration.' } };
   }
 
-  // Automatically resolve account_number if not yet resolved or if empty
-  if (toolName !== 'get_accounts' && args && (!args.account_number || args.account_number === '')) {
+  // Automatically resolve account_number only for tools that require it
+  if (TOOLS_REQUIRING_ACCOUNT.has(toolName) && args && (!args.account_number || args.account_number === '')) {
     args.account_number = await resolveAccount();
   }
 
@@ -573,6 +591,12 @@ async function enforceAutomatedRiskTargets() {
 
       // 1. AUTOMATED STOP-LOSS / BREAKEVEN PROTECTION
       if (curPrice <= effectiveStopPrice) {
+        const totalEstValue = totalShares * curPrice;
+        if (totalEstValue < 1.00) {
+          console.log('[RISK GUARDIAN] Skipping stop order for ' + sym + ': position value ($' + totalEstValue.toFixed(2) + ') is below Robinhood $1 minimum.');
+          continue;
+        }
+
         triggeredRiskActions.set(sym, Date.now());
         const isBreakeven = isRatcheted && curPrice >= avg * 0.98;
         const alertTitle = isBreakeven ? '🛡️ *BREAKEVEN EXIT EXECUTED (Zero Loss Protected)*' : '🛑 *AUTOMATED STOP-LOSS EXECUTED (24/7 Cloud Guard)*';
@@ -586,6 +610,11 @@ async function enforceAutomatedRiskTargets() {
           time_in_force: 'gfd',
           market_hours: 'regular_hours'
         });
+
+        if (res && res.error) {
+          console.error('[RISK GUARDIAN] Stop-loss order failed for ' + sym + ':', res.error.message);
+          continue;
+        }
 
         const state = (res && res.data && res.data.state === 'filled') ? '✅ FILLED ON EXCHANGE' : '⏳ QUEUED FOR MARKET OPEN (9:30 AM ET)';
         const ordId = (res && res.data) ? res.data.id : 'N/A';
@@ -615,10 +644,24 @@ async function enforceAutomatedRiskTargets() {
         );
       }
 
-      // 2. AUTOMATED TAKE-PROFIT HARVEST (+12.0%)
+      // 2. AUTOMATED TAKE-PROFIT HARVEST (+8.0%)
       else if (pnlPct >= TAKE_PROFIT_PCT) {
+        let trimShares = totalShares * TAKE_PROFIT_TRIM_PCT;
+        const totalEstValue = totalShares * curPrice;
+        const trimEstValue = trimShares * curPrice;
+
+        // Robinhood requires a minimum $1.00 for fractional equity orders
+        if (trimEstValue < 1.00) {
+          if (totalEstValue >= 1.00) {
+            // Sell all remaining dust shares so the order meets the $1 minimum requirement
+            trimShares = totalShares;
+          } else {
+            console.log('[RISK GUARDIAN] Skipping trim for ' + sym + ': total position value ($' + totalEstValue.toFixed(2) + ') is below Robinhood $1 minimum.');
+            continue;
+          }
+        }
+
         triggeredRiskActions.set(sym, Date.now());
-        const trimShares = totalShares * TAKE_PROFIT_TRIM_PCT;
 
         const res = await callRobinhood('place_equity_order', {
           account_number: RH_ACCOUNT,
@@ -629,6 +672,11 @@ async function enforceAutomatedRiskTargets() {
           time_in_force: 'gfd',
           market_hours: 'regular_hours'
         });
+
+        if (res && res.error) {
+          console.error('[RISK GUARDIAN] Take-profit order failed for ' + sym + ':', res.error.message);
+          continue;
+        }
 
         const state = (res && res.data && res.data.state === 'filled') ? '✅ FILLED ON EXCHANGE' : '⏳ QUEUED FOR MARKET OPEN (9:30 AM ET)';
         const ordId = (res && res.data) ? res.data.id : 'N/A';
