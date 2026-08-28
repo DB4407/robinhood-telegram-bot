@@ -9,7 +9,6 @@ const { evaluateStockPrediction, checkMarketGovernor } = require('./engine/predi
 const { optimizeWeightsFromHistory } = require('./engine/feedback_optimizer');
 const { scanDailyMoversForDeals, getSectorUniverse, addTickerToSectorRotation } = require('./engine/opportunity_scanner');
 const { loadStrategyInsights, performStrategyReflection } = require('./engine/self_reflection_engine');
-const { run24HourCryptoSimulation } = require('./engine/crypto_sandbox');
 
 // Robust .env loader: automatically strips UTF-8 BOM, trims whitespace, handles quotes
 function loadEnv() {
@@ -1245,41 +1244,6 @@ async function handleMessage(msg) {
     }
 
     report += '\n_Model recalibrates weights & memory automatically after every trade._';
-    return sendMessage(chatId, report, mainMenu);
-  }
-
-  // 🪙 TOP 5 CRYPTO QUANTITATIVE SANDBOX & PAPER-TRADING SIMULATOR
-  if (lower.includes('crypto') || lower.includes('coin') || lower.includes('sandbox') || text.includes('🪙')) {
-    const is15m = lower.includes('15m') || lower.includes('15 min') || lower.includes('15min') || lower.includes('15');
-    const isWeek = lower.includes('week') || lower.includes('7d') || lower.includes('past week');
-    const interval = is15m ? '15m' : '1h';
-    const simHours = isWeek ? 168 : 24;
-
-    await sendMessage(chatId, '🪙 _Simulating ' + (isWeek ? '7-Day' : '24-Hour') + ' strategy at ' + (is15m ? '15-minute' : '1-hour') + ' intervals across Top 5 cryptos (BTC, ETH, SOL, XRP, DOGE)..._');
-    const sim = await run24HourCryptoSimulation({ interval, hours: simHours, tradeSizeUSD: 20.0, ratchetPct: 0.04, takeProfitPct: 0.08, stopLossPct: 0.06 });
-
-    let report = '🪙 *Top 5 Crypto Quantitative Sandbox (' + interval.toUpperCase() + ' Intervals)*\n\n' +
-                 '📊 *Test Window:* `' + (isWeek ? 'Last 7 Days (168h)' : 'Last 24 Hours') + '` (' + interval + ' Coinbase Feeds)\n' +
-                 '💰 *Hypothetical Capital Deployed:* `$' + sim.totalDeployedCapital.toFixed(2) + '`\n' +
-                 '💵 *Net Closed Profit:* `+$' + sim.netClosedProfitUSD.toFixed(2) + '`\n' +
-                 '📈 *Total Net Gain:* `' + (sim.totalNetGainUSD >= 0 ? '+$' : '-$') + Math.abs(sim.totalNetGainUSD).toFixed(2) + '`\n' +
-                 '🎯 *Total Simulated ROI:* `' + (sim.totalROI >= 0 ? '+' : '') + sim.totalROI.toFixed(2) + '%` 🚀\n' +
-                 '🛡️ *Win Rate:* `' + sim.winRatePct + '%` (' + sim.wins + 'W / ' + sim.losses + 'L)\n\n' +
-                 '*Active Sandbox Positions:*\n';
-
-    for (const t of sim.tradeLog) {
-      if (t.action === 'OPEN_HOLDING') {
-        const sign = t.pnlPct >= 0 ? '+' : '';
-        const badge = t.pnlPct >= 4.0 ? '🛡️ *RATCHETED ($0 Risk)*' : (t.pnlPct >= 0 ? '🟢 Green' : '🔻 Holding Buffer');
-        report += '🔹 *' + t.name + ' (' + t.symbol.replace('-USD', '') + ')*\n' +
-                  '   • Entry: `$' + t.entryPrice.toLocaleString() + '` ➔ Live: `$' + t.exitPrice.toLocaleString() + '`\n' +
-                  '   • P&L: *' + sign + t.pnlPct.toFixed(2) + '%* (' + (t.pnlUSD >= 0 ? '+$' : '-$') + Math.abs(t.pnlUSD).toFixed(2) + ')\n' +
-                  '   • Status: ' + badge + '\n\n';
-      }
-    }
-
-    report += '_Strategy: Volatility Squeeze Entry + 4% Breakeven Ratchet + 8% Take-Profit Trim + Adaptive ATR Stop._\n' +
-              '_100% simulated sandbox running safely with zero real dollars at risk._';
     return sendMessage(chatId, report, mainMenu);
   }
 

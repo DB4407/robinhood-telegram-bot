@@ -9,7 +9,6 @@ node_modules/
 
 # Chat subscribers & personal session records
 subscribers.json
-data/crypto_sandbox_journal.jsonl
 
 # Logs & Runtime
 *.log

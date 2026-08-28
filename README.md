@@ -18,7 +18,6 @@ graph TD
     C --> D["Automated Risk Guardian<br>(-6% Stop / +4% Ratchet / +8% TP Trim)"]
     D --> E["Flight Recorder & Feedback Optimizer<br>(trades_journal.jsonl & SGD Calibration)"]
     E --> F["Mini-Rob Conversational Co-Pilot<br>(Google Gemini + Telegram Bridge)"]
-    A --> G["Top 5 Crypto Sandbox Simulator<br>(BTC, ETH, SOL, XRP, DOGE 15m/1h)"]
 ```
 
 ---
@@ -40,10 +39,7 @@ graph TD
    - Logs every entry snapshot and exit event into a black-box flight recorder (`trades_journal.jsonl`).
    - Uses stochastic gradient descent (SGD) to continuously recalibrate feature weights based on empirical trade outcomes.
 
-4. **🪙 Top 5 Crypto Quantitative Sandbox:**
-   - Connects to public Coinbase exchange feeds to simulate the strategy on **BTC, ETH, SOL, XRP, and DOGE** across 15-minute and 1-hour intervals with zero real capital at risk.
-
-5. **💬 Interactive Telegram Remote Terminal:**
+4. **💬 Interactive Telegram Remote Terminal:**
    - Real-time portfolio summaries, dark-mode technical charts, breaking news sentiment analysis, and conversational order execution powered by Google Gemini.
 
 ---
@@ -84,7 +80,7 @@ pm2 logs
 - **Zero Hardcoded Secrets:** All tokens, user IDs, and account numbers are strictly loaded via `.env` and excluded from version control.
 - **Single-Tenant Whitelist:** The bot ignores messages from any Telegram user ID other than the configured `AUTHORIZED_USER_ID`.
 - **Hard Circuit Breakers:** Maximum daily capital deployment and order sizing limits are strictly enforced in software.
-- **Educational / Sandbox Use:** Trading stocks and cryptocurrencies carries financial risk. Always test strategies thoroughly in sandbox mode prior to deploying real capital.
+- **Educational & Algorithmic Use:** Trading equities carries financial risk. Always test strategies thoroughly prior to deploying capital.
 
 ---
 
