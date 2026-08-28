@@ -48,6 +48,17 @@ const AUTHORIZED_USER_ID = parseInt(process.env.AUTHORIZED_USER_ID || '0', 10);
 let RH_ACCOUNT = process.env.RH_ACCOUNT || '';
 const RH_TOKEN = process.env.ROBINHOOD_TOKEN || '';
 
+if (!TELEGRAM_TOKEN) {
+  console.error('❌ [TELEGRAM ERROR] TELEGRAM_TOKEN is missing from .env! Telegram interface cannot connect.');
+} else {
+  console.log('📱 [TELEGRAM] Interface configured for bot token: ••••' + TELEGRAM_TOKEN.slice(-6));
+}
+if (!AUTHORIZED_USER_ID) {
+  console.error('❌ [SECURITY ERROR] AUTHORIZED_USER_ID is missing from .env! Incoming messages will be blocked.');
+} else {
+  console.log('🔒 [SECURITY] Single-tenant whitelist configured for User ID:', AUTHORIZED_USER_ID);
+}
+
 // Automatically discovers and binds Dylan's active agentic brokerage account
 async function resolveAccount() {
   if (RH_ACCOUNT) return RH_ACCOUNT;
@@ -1617,8 +1628,18 @@ async function startPolling() {
 
   while (true) {
     try {
+      if (!TELEGRAM_TOKEN) {
+        console.error('❌ [TELEGRAM ERROR] Cannot poll: TELEGRAM_TOKEN is missing in .env');
+        await new Promise(r => setTimeout(r, 10000));
+        continue;
+      }
       const res = await fetch(TELEGRAM_API + '/getUpdates?offset=' + offset + '&timeout=25');
       const data = await res.json();
+      if (!data.ok) {
+        console.error('❌ [TELEGRAM ERROR] getUpdates failed:', data.description || data.error_code);
+        await new Promise(r => setTimeout(r, 5000));
+        continue;
+      }
       if (data.ok && data.result) {
         for (const u of data.result) {
           offset = u.update_id + 1;
@@ -1626,6 +1647,7 @@ async function startPolling() {
         }
       }
     } catch (err) {
+      console.error('❌ [TELEGRAM ERROR] Polling exception:', err.message);
       await new Promise(r => setTimeout(r, 2000));
     }
   }
