@@ -538,6 +538,12 @@ function getRiskConfig() {
   };
 }
 
+// Universal dynamic risk getters: ensures all handlers and commands reflect trading_config.json live without ReferenceError
+Object.defineProperty(global, 'STOP_LOSS_PCT', { get: () => getRiskConfig().stopLossPct, configurable: true });
+Object.defineProperty(global, 'BREAKEVEN_RATCHET_PCT', { get: () => getRiskConfig().breakevenRatchetPct, configurable: true });
+Object.defineProperty(global, 'TAKE_PROFIT_PCT', { get: () => getRiskConfig().takeProfitPct, configurable: true });
+Object.defineProperty(global, 'TAKE_PROFIT_TRIM_PCT', { get: () => getRiskConfig().takeProfitTrimPct, configurable: true });
+
 const triggeredRiskActions = new Map(); // Cooldown map (2 hours per symbol)
 const ratchetedSymbols = new Set(); // Tracks symbols whose stop loss ratcheted to breakeven
 
