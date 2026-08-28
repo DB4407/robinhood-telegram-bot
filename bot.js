@@ -517,17 +517,22 @@ function loadTradingConfig() {
     circuit_breakers: { max_single_order_usd: 50.00, min_single_order_usd: 1.00, max_daily_deploy_usd: 150.00 }
   };
 }
-const TRADING_CONFIG = loadTradingConfig();
-const STOP_LOSS_PCT = (TRADING_CONFIG.risk && TRADING_CONFIG.risk.stop_loss_pct) || 0.06;
-const BREAKEVEN_RATCHET_PCT = (TRADING_CONFIG.risk && TRADING_CONFIG.risk.breakeven_ratchet_pct) || 0.04;
-const TAKE_PROFIT_PCT = (TRADING_CONFIG.risk && TRADING_CONFIG.risk.take_profit_pct) || 0.08;
-const TAKE_PROFIT_TRIM_PCT = (TRADING_CONFIG.risk && TRADING_CONFIG.risk.take_profit_trim_pct) || 0.50;
-const triggeredRiskActions = new Map(); // Cooldown map (2 hours per symbol)
+function getRiskConfig() {
+  const cfg = loadTradingConfig();
+  return {
+    stopLossPct: (cfg.risk && cfg.risk.stop_loss_pct) || 0.06,
+    breakevenRatchetPct: (cfg.risk && cfg.risk.breakeven_ratchet_pct) || 0.04,
+    takeProfitPct: (cfg.risk && cfg.risk.take_profit_pct) || 0.08,
+    takeProfitTrimPct: (cfg.risk && cfg.risk.take_profit_trim_pct) || 0.50
+  };
+}
 
+const triggeredRiskActions = new Map(); // Cooldown map (2 hours per symbol)
 const ratchetedSymbols = new Set(); // Tracks symbols whose stop loss ratcheted to breakeven
 
 async function enforceAutomatedRiskTargets() {
   try {
+    const { stopLossPct, breakevenRatchetPct, takeProfitPct, takeProfitTrimPct } = getRiskConfig();
     const posRes = await callRobinhood('get_equity_positions', { account_number: RH_ACCOUNT });
     if (!posRes || !posRes.data || !posRes.data.positions) return;
 
@@ -565,8 +570,8 @@ async function enforceAutomatedRiskTargets() {
       const avg = getEffectiveCostBasis(p, curPrice);
       const pnlPct = (curPrice - avg) / avg;
 
-      // 0. AUTOMATED BREAKEVEN STOP RATCHET (+4.0%)
-      if (pnlPct >= BREAKEVEN_RATCHET_PCT && !ratchetedSymbols.has(sym)) {
+      // 0. AUTOMATED BREAKEVEN STOP RATCHET
+      if (pnlPct >= breakevenRatchetPct && !ratchetedSymbols.has(sym)) {
         ratchetedSymbols.add(sym);
         console.log(`[RISK GUARDIAN] BREAKEVEN RATCHET ACTIVATED FOR ${sym} @ +${(pnlPct * 100).toFixed(2)}%`);
         await sendMessage(
@@ -576,7 +581,7 @@ async function enforceAutomatedRiskTargets() {
           '• *Unrealized Gain:* *+' + (pnlPct * 100).toFixed(2) + '%* 🚀\n' +
           '• *New Stop-Loss Floor:* `$' + avg.toFixed(2) + '` (Your exact entry price)\n' +
           '• *Capital at Risk:* **$0.00 (Playing With House Money!)**\n\n' +
-          '_If the stock continues up to +' + (TAKE_PROFIT_PCT * 100).toFixed(0) + '%, profit target triggers. If it dumps, you exit with zero loss._',
+          '_If the stock continues up to +' + (takeProfitPct * 100).toFixed(0) + '%, profit target triggers. If it dumps, you exit with zero loss._',
           mainMenu
         );
       }
@@ -585,9 +590,9 @@ async function enforceAutomatedRiskTargets() {
       const lastTrigger = triggeredRiskActions.get(sym);
       if (lastTrigger && (Date.now() - lastTrigger) < 7200000) continue;
 
-      // Effective stop loss: if ratcheted, floor is entry price (avg); otherwise avg * (1 - STOP_LOSS_PCT)
+      // Effective stop loss: if ratcheted, floor is entry price (avg); otherwise avg * (1 - stopLossPct)
       const isRatcheted = ratchetedSymbols.has(sym);
-      const effectiveStopPrice = isRatcheted ? avg : (avg * (1 - STOP_LOSS_PCT));
+      const effectiveStopPrice = isRatcheted ? avg : (avg * (1 - stopLossPct));
 
       // 1. AUTOMATED STOP-LOSS / BREAKEVEN PROTECTION
       if (curPrice <= effectiveStopPrice) {
@@ -644,9 +649,9 @@ async function enforceAutomatedRiskTargets() {
         );
       }
 
-      // 2. AUTOMATED TAKE-PROFIT HARVEST (+8.0%)
-      else if (pnlPct >= TAKE_PROFIT_PCT) {
-        let trimShares = totalShares * TAKE_PROFIT_TRIM_PCT;
+      // 2. AUTOMATED TAKE-PROFIT HARVEST
+      else if (pnlPct >= takeProfitPct) {
+        let trimShares = totalShares * takeProfitTrimPct;
         const totalEstValue = totalShares * curPrice;
         const trimEstValue = trimShares * curPrice;
 
@@ -736,9 +741,11 @@ async function autoReinvestCash(spendableBuyingPower) {
       ordRes.data.orders.filter(o => o.state === 'queued').forEach(o => heldSymbols.add(o.symbol));
     }
 
-    const sectorPriority = ['VRT', 'ANET', 'MU', 'CEG', 'PLTR'];
+    const universeMap = getSectorUniverse();
+    const sectorPriority = Object.keys(universeMap);
     let targetSym = sectorPriority.find(sym => !heldSymbols.has(sym));
-    if (!targetSym) targetSym = 'VRT';
+    if (!targetSym && sectorPriority.length > 0) targetSym = sectorPriority[0];
+    if (!targetSym) return;
 
     const deployAmount = Math.min(20.00, Math.min(MAX_SINGLE_ORDER_USD, Math.floor(spendableBuyingPower)));
     if (deployAmount < 5.00) return;
@@ -847,7 +854,7 @@ async function sendVisualChart(chatId, symbol) {
 
 // 🎯 PREDICTIVE ALPHA RADAR (PSEUDO-NEURAL ENGINE)
 async function getLivePredictiveRadarReport() {
-  const universe = ['VRT', 'NVDA', 'TSM', 'ANET', 'MU', 'INTC', 'MRVL', 'CEG', 'PLTR', 'WMT'];
+  const universe = Object.keys(getSectorUniverse());
   const gov = await checkMarketGovernor();
 
   let report = '🎯 *Predictive Alpha Radar (Pseudo-Neural Engine)*\n\n' +
@@ -1420,7 +1427,7 @@ async function handleMessage(msg) {
       }
     } catch (e) {}
 
-    if (holdingsToScan.length === 0) holdingsToScan = ['NVDA', 'TSM', 'INTC'];
+    if (holdingsToScan.length === 0) holdingsToScan = Object.keys(getSectorUniverse()).slice(0, 5);
 
     let report = '📰 *Live Portfolio Breaking News Wire*\n\n';
     for (const sym of holdingsToScan) {
