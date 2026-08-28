@@ -1,0 +1,34 @@
+{
+  "last_updated": "2026-08-27T21:48:37.781Z",
+  "total_trades_analyzed": 9,
+  "wins": 8,
+  "losses": 1,
+  "win_rate_pct": 88.9,
+  "total_realized_usd": 11.65,
+  "market_regime": "High-Beta Expansion (Bullish Tailwinds Active)",
+  "active_weights": {
+    "volumeAnomaly": 1.33587,
+    "rsiState": -0.76449,
+    "momentum5d": 1.20999,
+    "volatilitySqueeze": 1.48183,
+    "trendAlignment": 1.24434,
+    "squeezeVolumeInteraction": 1.89687,
+    "sentimentFactor": 0.8554
+  },
+  "alpha_drivers": [
+    "Physical AI Hardware Monopoly Bottlenecks (GPU Silicon, Foundries, Thermals)",
+    "Volatility Squeeze coiling prior to volume expansion",
+    "Disciplined +8% take-profit profit-locking cycle"
+  ],
+  "learned_heuristics": [
+    "50% Take-Profit Trims at +8.0% effectively neutralize downside risk by banking hard dollars early.",
+    "Breakeven Stop Ratchet (+4.0%) converts winning trades into house-money bets at zero principal risk.",
+    "Daily Movers filtering for RSI <= 68 prevents buying exhausted tops while capturing active volume bursts.",
+    "Immediate redeployment of harvested profits into semiconductor infrastructure (ANET, VRT) maximizes velocity of capital."
+  ],
+  "evolutionary_directives": [
+    "Continue aggressive profit-taking at +8% during high intraday volatility.",
+    "Prioritize stocks coiling inside Bollinger ATR channels (Squeeze state = true).",
+    "Never allocate capital without Market Index Governor clearance (QQQ/SOXX)."
+  ]
+}

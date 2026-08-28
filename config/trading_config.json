@@ -1,0 +1,78 @@
+{
+  "risk": {
+    "stop_loss_pct": 0.06,
+    "breakeven_ratchet_pct": 0.04,
+    "take_profit_pct": 0.08,
+    "take_profit_trim_pct": 0.5
+  },
+  "circuit_breakers": {
+    "max_single_order_usd": 50,
+    "min_single_order_usd": 1,
+    "max_daily_deploy_usd": 150
+  },
+  "filters": {
+    "min_volume_threshold": 1000,
+    "governor_symbols": [
+      "QQQ",
+      "SOXX",
+      "SPY"
+    ]
+  },
+  "prediction": {
+    "high_conviction_cutoff": 0.7,
+    "moderate_conviction_cutoff": 0.5,
+    "target_horizon_days": 3,
+    "profit_target_pct": 0.05,
+    "trailing_stop_pct": 0.025
+  },
+  "universe": {
+    "TSM": {
+      "name": "Taiwan Semi",
+      "sector": "Semiconductor Foundry"
+    },
+    "NVDA": {
+      "name": "NVIDIA",
+      "sector": "GPU Silicon & AI Compute"
+    },
+    "INTC": {
+      "name": "Intel",
+      "sector": "US Foundry Turnaround"
+    },
+    "MRVL": {
+      "name": "Marvell Tech",
+      "sector": "Custom AI ASICs"
+    },
+    "WMT": {
+      "name": "Walmart",
+      "sector": "Consumer Defensive / Retail Tech"
+    },
+    "VRT": {
+      "name": "Vertiv Holdings",
+      "sector": "Liquid Cooling & Thermals"
+    },
+    "ANET": {
+      "name": "Arista Networks",
+      "sector": "AI Cluster Networking"
+    },
+    "MU": {
+      "name": "Micron Tech",
+      "sector": "HBM Memory Supercycle"
+    },
+    "CEG": {
+      "name": "Constellation Energy",
+      "sector": "Nuclear AI Power"
+    },
+    "PLTR": {
+      "name": "Palantir Tech",
+      "sector": "Enterprise AI Software"
+    },
+    "CRWD": {
+      "name": "CRWD High Alpha Mover",
+      "sector": "Robinhood Daily Mover Breakout"
+    },
+    "OKTA": {
+      "name": "OKTA High Alpha Mover",
+      "sector": "Robinhood Daily Mover Breakout"
+    }
+  }
+}

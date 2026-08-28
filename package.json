@@ -1,0 +1,13 @@
+{
+  "name": "robinhood-telegram-bridge",
+  "version": "1.0.0",
+  "description": "Telegram Bot Bridge for Robinhood Trading & Monitoring",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {}
+}
