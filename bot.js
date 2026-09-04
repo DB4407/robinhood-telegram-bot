@@ -515,6 +515,198 @@ async function executeSellOrder(chatId, symbol, qtyType) {
   );
 }
 
+// 3. LIVE CAPITAL SWAP / REALLOCATION EXECUTION
+async function executeSwapOrder(chatId, fromSym, toSym, qtyType = 'all') {
+  const sellSym = fromSym.toUpperCase().trim();
+  const buySym = toSym.toUpperCase().trim();
+
+  if (sellSym === buySym) {
+    return sendMessage(chatId, '⚠️ Source and destination symbols cannot be identical.', mainMenu);
+  }
+
+  const posRes = await callRobinhood('get_equity_positions', { account_number: RH_ACCOUNT });
+  if (!posRes || !posRes.data || !posRes.data.positions) {
+    return sendMessage(chatId, '❌ Could not verify current holdings on Robinhood.', mainMenu);
+  }
+
+  const pos = posRes.data.positions.find(p => p.symbol === sellSym && parseFloat(p.shares_available_for_sells || p.quantity) > 0);
+  if (!pos) {
+    return sendMessage(chatId, '⚠️ You have 0 sellable shares of `' + sellSym + '` in your Robinhood account to swap from.', mainMenu);
+  }
+
+  const totalShares = parseFloat(pos.shares_available_for_sells || pos.quantity);
+  let sellShares = totalShares;
+  if (qtyType === 'half' || qtyType === '50%') {
+    sellShares = totalShares * 0.5;
+  } else if (qtyType && qtyType.endsWith('%')) {
+    sellShares = totalShares * (parseFloat(qtyType) / 100);
+  } else if (qtyType && !isNaN(parseFloat(qtyType))) {
+    sellShares = Math.min(totalShares, parseFloat(qtyType));
+  }
+
+  const qSell = await fetchQuote(sellSym);
+  const curSellPrice = (qSell && qSell.price) ? qSell.price : 0;
+  if (curSellPrice <= 0) {
+    return sendMessage(chatId, '❌ Could not fetch market quote for `' + sellSym + '`.', mainMenu);
+  }
+
+  const estProceeds = sellShares * curSellPrice;
+  if (estProceeds < 1.00) {
+    return sendMessage(chatId, '⚠️ Estimated swap proceeds ($' + estProceeds.toFixed(2) + ') are below the $1.00 Robinhood minimum.', mainMenu);
+  }
+
+  const deployUSD = Math.min(estProceeds, MAX_SINGLE_ORDER_USD);
+
+  await sendMessage(chatId, '🔄 *Initiating Autonomous Capital Swap...*\n' +
+    '• *Liquidating:* `' + sellShares.toFixed(4) + '` shares of `' + sellSym + '` (~$' + estProceeds.toFixed(2) + ')\n' +
+    '• *Rotating into:* `$' + deployUSD.toFixed(2) + '` of `' + buySym + '`\n' +
+    '_Eliminating opportunity cost & reallocating into higher alpha!_');
+
+  // Step 1: Submit Sell Order
+  const sellRes = await callRobinhood('place_equity_order', {
+    account_number: RH_ACCOUNT,
+    symbol: sellSym,
+    side: 'sell',
+    type: 'market',
+    quantity: sellShares.toFixed(6),
+    time_in_force: 'gfd',
+    market_hours: 'regular_hours'
+  });
+
+  if (!sellRes || !sellRes.data) {
+    const errMsg = (sellRes && sellRes.error) ? sellRes.error.message : 'Exchange rejected sell leg.';
+    return sendMessage(chatId, '❌ *Swap Sell Leg Failed:*\n`' + errMsg + '`', mainMenu);
+  }
+
+  const avgCost = getEffectiveCostBasis(pos, curSellPrice);
+  const realizedPnlUSD = (curSellPrice - avgCost) * sellShares;
+  const realizedPnlPct = avgCost > 0 ? ((curSellPrice - avgCost) / avgCost) * 100 : 0;
+
+  tradeLogger.logTradeExit({
+    symbol: sellSym,
+    exitPrice: curSellPrice,
+    exitReason: 'ALPHA_SWAP_TO_' + buySym,
+    realizedPnlUSD: realizedPnlUSD,
+    realizedPnlPct: realizedPnlPct,
+    durationHours: 24
+  });
+  optimizeWeightsFromHistory();
+
+  // Small delay for clean broker sequencing
+  await new Promise(r => setTimeout(r, 1200));
+
+  // Step 2: Submit Buy Order
+  const buyRes = await callRobinhood('place_equity_order', {
+    account_number: RH_ACCOUNT,
+    symbol: buySym,
+    side: 'buy',
+    type: 'market',
+    dollar_amount: deployUSD.toFixed(2),
+    time_in_force: 'gfd',
+    market_hours: 'regular_hours'
+  });
+
+  if (!buyRes || !buyRes.data) {
+    const errMsg = (buyRes && buyRes.error) ? buyRes.error.message : 'Exchange rejected buy leg.';
+    return sendMessage(chatId, '⚠️ *Sell leg completed, but Buy leg failed:*\n`' + errMsg + '`\n_Cash remains in your Robinhood account balance._', mainMenu);
+  }
+
+  dailyDeployedUSD += deployUSD;
+  const buyOrd = buyRes.data;
+
+  tradeLogger.logTradeEntry({
+    symbol: buySym,
+    side: 'buy',
+    amountUSD: deployUSD,
+    price: parseFloat(buyOrd.price || 0),
+    shares: parseFloat(buyOrd.quantity || 0)
+  });
+
+  const state = buyOrd.state === 'filled' ? '✅ FILLED ON EXCHANGE' : '⏳ QUEUED FOR MARKET OPEN (9:30 AM ET)';
+
+  return sendMessage(
+    chatId,
+    '🔄 *CAPITAL SWAP SUCCESSFULLY EXECUTED!* 🚀\n\n' +
+    '• *Liquidated Laggard:* `' + sellSym + '` (' + (realizedPnlPct >= 0 ? '+' : '') + realizedPnlPct.toFixed(2) + '% realized)\n' +
+    '• *Accumulated Leader:* `' + buySym + '` ($' + deployUSD.toFixed(2) + ')\n' +
+    '• *Order Status:* ' + state + '\n' +
+    '• *Buy Order ID:* `' + buyOrd.id + '`\n\n' +
+    '_Capital is now actively working in a higher-conviction asset._',
+    mainMenu
+  );
+}
+
+// 4. LIVE AUDIT OF HOLDINGS VS LUCRATIVE ALTERNATIVES & OPTIONS
+async function getLiveHoldingsAuditReport() {
+  try {
+    const posRes = await callRobinhood('get_equity_positions', { account_number: RH_ACCOUNT });
+    const positions = (posRes && posRes.data && posRes.data.positions)
+      ? posRes.data.positions.filter(p => parseFloat(p.shares_available_for_sells || p.quantity) > 0)
+      : [];
+
+    const holdings = [];
+    const heldSymbols = new Set();
+
+    for (const p of positions) {
+      const sym = p.symbol;
+      heldSymbols.add(sym);
+      const q = await fetchQuote(sym);
+      const curPrice = (q && q.price) ? q.price : 0;
+      const costBasis = getEffectiveCostBasis(p, curPrice);
+      const shares = parseFloat(p.shares_available_for_sells || p.quantity);
+      const pnlPct = costBasis > 0 ? ((curPrice - costBasis) / costBasis) * 100 : 0;
+      const equityUSD = shares * curPrice;
+
+      const pred = await evaluateStockPrediction(sym);
+      holdings.push({
+        symbol: sym,
+        shares,
+        costBasis,
+        curPrice,
+        pnlPct,
+        equityUSD,
+        pred
+      });
+    }
+
+    // Build candidate alternatives from universe
+    const universe = getSectorUniverse();
+    const candidateSymbols = Object.keys(universe).filter(s => !heldSymbols.has(s));
+
+    const universeCandidates = [];
+    for (const sym of candidateSymbols.slice(0, 6)) {
+      try {
+        const pred = await evaluateStockPrediction(sym);
+        if (pred) {
+          universeCandidates.push({
+            symbol: sym,
+            name: universe[sym].name,
+            sector: universe[sym].sector,
+            curPrice: pred.raw ? pred.raw.curPrice : 0,
+            pred
+          });
+        }
+      } catch (e) {}
+    }
+
+    // Sort alternatives by highest breakout probability
+    universeCandidates.sort((a, b) => (b.pred?.probability || 0) - (a.pred?.probability || 0));
+
+    const marketGovernor = await checkMarketGovernor();
+
+    const auditMarkdown = await pilotEngine.auditHoldingsVsAlternatives({
+      holdings,
+      universeCandidates: universeCandidates.slice(0, 4),
+      marketGovernor
+    });
+
+    return auditMarkdown;
+  } catch (err) {
+    console.error('getLiveHoldingsAuditReport error:', err.message);
+    return '⚠️ Error generating holdings audit: ' + err.message;
+  }
+}
+
 // 24/7 AUTOMATED RISK TARGETS ENFORCEMENT ENGINE (STOP-LOSS, BREAKEVEN RATCHET & TAKE-PROFIT)
 function loadTradingConfig() {
   try {
@@ -953,9 +1145,9 @@ async function getLivePredictiveRadarReport() {
 const mainMenu = {
   keyboard: [
     [{ text: '📊 Live Portfolio' }, { text: '🎯 Predictive Radar' }],
-    [{ text: '👨‍✈️ AI Pilot Briefing' }, { text: '🔍 Movers Scan' }],
-    [{ text: '🔄 Sector Rotation' }, { text: '🛡️ Risk Targets' }],
-    [{ text: '📰 Market News' }, { text: '💬 Commands Help' }]
+    [{ text: '👨‍✈️ AI Pilot Briefing' }, { text: '⚖️ Position & Swap Audit' }],
+    [{ text: '🔍 Movers Scan' }, { text: '🔄 Sector Rotation' }],
+    [{ text: '🛡️ Risk Targets' }, { text: '💬 Commands Help' }]
   ],
   resize_keyboard: true,
   persistent: true
@@ -1347,6 +1539,15 @@ async function handleMessage(msg) {
     return executeSellOrder(chatId, sym, qtyType);
   }
 
+  // 2.5 DIRECT CAPITAL SWAP EXECUTION: swap <FROM> to <TO> [qty/amount]
+  const swapMatch = text.match(/^(?:\/)?swap\s+([a-zA-Z]{1,5})\s+(?:to\s+)?([a-zA-Z]{1,5})(?:\s+(all|half|\d+%|\d+(?:\.\d+)?))?$/i);
+  if (swapMatch) {
+    const fromSym = swapMatch[1];
+    const toSym = swapMatch[2];
+    const qtyType = swapMatch[3] || 'all';
+    return executeSwapOrder(chatId, fromSym, toSym, qtyType);
+  }
+
   // 🎯 PREDICTIVE RADAR & ALPHA SCORING
   if (lower.includes('predict') || text.includes('🎯') || lower.includes('radar')) {
     const specificMatch = text.match(/^(?:predict|score|odds)\s+([a-zA-Z]{1,5})$/i);
@@ -1391,6 +1592,13 @@ async function handleMessage(msg) {
       gov
     );
     return sendMessage(chatId, briefing, mainMenu);
+  }
+
+  // ⚖️ POSITION & SWAP AUDIT (HOLDINGS VS LUCRATIVE ALTERNATIVES & OPTIONS)
+  if (lower.includes('audit') || text.includes('⚖️') || lower.includes('alternative') || lower.includes('options') || lower.includes('evaluate') || lower.includes('efficiency') || (lower.includes('swap') && !swapMatch)) {
+    await sendMessage(chatId, '⚖️ _Pilot Rob is auditing current holdings against alternative opportunities and options leverage scenarios..._');
+    const report = await getLiveHoldingsAuditReport();
+    return sendMessage(chatId, report, mainMenu);
   }
 
   if (lower.includes('scan') || text.includes('🔍') || lower.includes('deal') || lower.includes('opportunity') || text.includes('Movers Scan')) {
@@ -1568,6 +1776,10 @@ async function handleMessage(msg) {
   if (lower.includes('help') || text.includes('💬')) {
     const helpText = 
       '📖 *Autonomous AI Quantitative Trading & Prediction Guide*\n\n' +
+      '👨‍✈️ *Autonomous AI Pilot & Position Audits:*\n' +
+      '• Tap *👨‍✈️ AI Pilot Briefing* — Executive cockpit briefing synthesizing live portfolio health, journal memory, and tactical directives!\n' +
+      '• Tap *⚖️ Position & Swap Audit* (or text `audit`) — Evaluates current holdings vs unheld high-alpha candidates to eliminate opportunity cost, recommending tactical capital rotations & options leverage!\n' +
+      '• `swap <FROM> to <TO>` (e.g. `swap WMT to VRT`) — Liquidates stagnant holding and rotates funds immediately into high-conviction leader!\n\n' +
       '🎯 *Pseudo-Neural Predictive Engine:*\n' +
       '• Tap *🎯 Predictive Radar* — Evaluates 3-5 day breakout probabilities across physical AI supply chain stocks using volume anomalies, volatility squeeze, and market governors!\n' +
       '• Text `predict <ticker>` (e.g. `predict VRT`) — Detailed quantitative score, key drivers, and tactical action!\n\n' +
@@ -1583,7 +1795,7 @@ async function handleMessage(msg) {
       '• `Rob, reset memory` — Wipes conversation history.\n\n' +
       '🚀 *Manual Quick Commands:*\n' +
       '• `buy <ticker> $<dollars>` | `sell <ticker> <shares or %>`\n' +
-      '• `chart <ticker>` | `news <ticker>` | `quote <ticker>`\n\n' +
+      '• `swap <from> <to>` | `chart <ticker>` | `news <ticker>`\n\n' +
       '_Evolving continuously on AWS EC2 with automated trade flight recorder._';
     return sendMessage(chatId, helpText, mainMenu);
   }

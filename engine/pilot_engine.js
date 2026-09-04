@@ -274,7 +274,7 @@ async function generatePilotBriefing(portfolio, openPositions, marketGovernor) {
     `You are Rob, the autonomous AI Trading Pilot. ` +
     `Deliver a sharp, confident, executive-level cockpit briefing for the trader's phone. ` +
     `Format in clean GitHub Markdown with punchy bullet points and financial emojis. ` +
-    `Keep it under 150 words.`;
+    `Keep it under 160 words.`;
 
   const userPrompt = 
     `Portfolio State: Equity $${parseFloat(portfolio.total_value || 0).toFixed(2)}, Cash $${parseFloat(portfolio.cash || 0).toFixed(2)}\n` +
@@ -284,8 +284,8 @@ async function generatePilotBriefing(portfolio, openPositions, marketGovernor) {
     `Learned Rules: ${journal.learnedHeuristics.slice(0, 2).join('; ')}\n\n` +
     `Provide:\n` +
     `1. Cockpit Status & Macro Assessment\n` +
-    `2. Holdings Health & Capital Protection Check\n` +
-    `3. Pilot's Next Tactical Move (Where the next cash goes and why)`;
+    `2. Holdings Health & Opportunity Cost Check (Evaluate if current holdings are outperforming or if capital should rotate into more lucrative coiling bottlenecks)\n` +
+    `3. Pilot's Next Tactical Move (Where capital should rotate or deploy next)`;
 
   try {
     const result = await callPilotLLM(systemPrompt, userPrompt, 0.4);
@@ -298,12 +298,95 @@ async function generatePilotBriefing(portfolio, openPositions, marketGovernor) {
          `🌐 *Cockpit Status:* Tech momentum operating within standard deviation channels.\n` +
          `📊 *Journal Metrics:* ${journal.winRate} win rate across ${journal.totalTrades} closed trades (+$${journal.totalPnlUSD} realized).\n` +
          `🛡️ *Holdings Health:* All ${openPositions.length} positions actively guarded by -6% stop-loss floors and breakeven ratchets.\n` +
-         `🎯 *Next Tactical Directive:* Prioritizing liquid cooling (VRT) and cluster networking (ANET) on next cash accumulation.`;
+         `⚖️ *Opportunity Audit:* Monitoring current holdings against high-alpha coiling bottlenecks (VRT, ANET).\n` +
+         `🎯 *Next Tactical Directive:* Prioritizing liquid cooling (VRT) on next cash accumulation or position rotation.`;
+}
+
+/**
+ * Autonomous Opportunity Cost & Position Efficiency Audit
+ * Evaluates current open holdings against alternative universe candidates and options leverage potential.
+ */
+async function auditHoldingsVsAlternatives({ holdings = [], universeCandidates = [], marketGovernor }) {
+  const journal = buildJournalSummary();
+  const cfg = loadTradingConfig();
+
+  // 1. Build telemetry string for current open holdings
+  let holdingsTelemetry = '';
+  if (holdings.length === 0) {
+    holdingsTelemetry = 'No active stock holdings (100% Cash Reserves).';
+  } else {
+    holdingsTelemetry = holdings.map(h => {
+      const pnlSign = (h.pnlPct || 0) >= 0 ? '+' : '';
+      const probStr = h.pred ? `${h.pred.probabilityPct}%` : 'N/A';
+      const rsiStr = h.pred && h.pred.raw ? h.pred.raw.rsi : 'N/A';
+      const volStr = h.pred && h.pred.raw ? `${h.pred.raw.volRatio}x` : 'N/A';
+      const sqzStr = h.pred && h.pred.raw && h.pred.raw.isSqueezing ? '⚡ COILING SQUEEZE' : 'NONE';
+      return `• ${h.symbol}: Equity $${(h.equityUSD || 0).toFixed(2)}, CostBasis $${(h.costBasis || 0).toFixed(2)}, Current $${(h.curPrice || 0).toFixed(2)}, PnL ${pnlSign}${(h.pnlPct || 0).toFixed(2)}%, Breakout Odds: ${probStr}, RSI: ${rsiStr}, Vol: ${volStr}, Squeeze: ${sqzStr}`;
+    }).join('\n');
+  }
+
+  // 2. Build telemetry string for candidate universe
+  let altsTelemetry = '';
+  if (universeCandidates.length === 0) {
+    altsTelemetry = 'No alternative candidates provided.';
+  } else {
+    altsTelemetry = universeCandidates.map(c => {
+      const probStr = c.pred ? `${c.pred.probabilityPct}%` : 'N/A';
+      const rsiStr = c.pred && c.pred.raw ? c.pred.raw.rsi : 'N/A';
+      const volStr = c.pred && c.pred.raw ? `${c.pred.raw.volRatio}x` : 'N/A';
+      const sqzStr = c.pred && c.pred.raw && c.pred.raw.isSqueezing ? '⚡ COILING SQUEEZE' : 'NONE';
+      return `• ${c.symbol} (${c.name || c.symbol} - ${c.sector || 'AI Hardware'}): Price $${(c.curPrice || 0).toFixed(2)}, Breakout Odds: ${probStr}, RSI: ${rsiStr}, Vol: ${volStr}, Squeeze: ${sqzStr}`;
+    }).join('\n');
+  }
+
+  const systemPrompt =
+    `You are Rob, the Chief Investment Officer & Autonomous AI Pilot of an elite quantitative trading operation.\n` +
+    `Your mandate: Maximize risk-adjusted alpha and eliminate "opportunity cost".\n` +
+    `Capital must NEVER sit trapped in stagnant, low-momentum, or exhausted positions when vastly superior, higher-alpha setups are coiling.\n` +
+    `You evaluate both common stock capital rotation (swapping laggards for leaders) and options contract leverage scenarios (asymmetric upside vs theta decay).\n` +
+    `Deliver a sharp, structured, authoritative executive audit formatted in clean GitHub Markdown with emojis for Telegram mobile viewing. Keep it under 260 words.`;
+
+  const userPrompt =
+    `--- CURRENT HOLDINGS TELEMETRY ---\n` +
+    `${holdingsTelemetry}\n\n` +
+    `--- HIGH-ALPHA ALTERNATIVE CANDIDATES ---\n` +
+    `${altsTelemetry}\n\n` +
+    `--- FLIGHT LOG (TRADE JOURNAL MEMORY) ---\n` +
+    `• Historical Win Rate: ${journal.winRate} across ${journal.totalTrades} closed trades (+$${journal.totalPnlUSD} realized)\n` +
+    `• Core Rules: ${journal.learnedHeuristics.slice(0, 2).join('; ')}\n` +
+    `• Market Climate: ${marketGovernor ? (marketGovernor.isRiskOff ? 'DEFENSIVE RISK-OFF' : 'FAVORABLE TECH EXPANSION') : 'NORMAL'}\n\n` +
+    `TASK:\n` +
+    `1. 📊 HOLDINGS EFFICIENCY AUDIT: Grade each currently held position (🚀 LEADER, ⚖️ SOLID HOLD, or ⚠️ LAGGARD/SWAP CANDIDATE) with a 1-sentence diagnostic on whether capital is working or stalling.\n` +
+    `2. 🔄 #1 TACTICAL CAPITAL SWAP: Identify the holding with the highest opportunity cost (weakest/stagnant) and recommend the #1 highest-alpha alternative to rotate into, explaining the catalyst/quant edge.\n` +
+    `3. 📈 OPTIONS & ASYMMETRIC LEVERAGE ASSESSMENT: For our top breakout candidate (held or alternative), evaluate whether buying Call Options (e.g. 30-45 DTE near-the-money) offers asymmetric leverage or if fractional equity accumulation is superior given theta decay and risk control.\n` +
+    `4. 🎯 ACTION DIRECTIVE: Give the exact command for the user to execute (e.g. "Reply: swap <LAGGARD> to <LEADER>").`;
+
+  try {
+    const result = await callPilotLLM(systemPrompt, userPrompt, 0.3);
+    if (result && result.content) {
+      return result.content;
+    }
+  } catch (err) {
+    console.error('[PILOT ENGINE] Holdings audit error:', err.message);
+  }
+
+  // Fallback heuristic report
+  return (
+    `⚖️ *AI Pilot Position Audit & Opportunity Cost Report*\n\n` +
+    `📊 *Current Holdings Status:*\n` +
+    (holdings.length > 0
+      ? holdings.map(h => `• *${h.symbol}:* $${(h.equityUSD || 0).toFixed(2)} (${(h.pnlPct || 0) >= 0 ? '+' : ''}${(h.pnlPct || 0).toFixed(1)}%) — Breakout Odds: ${h.pred ? h.pred.probabilityPct : 50}%`).join('\n')
+      : `• No active stock positions. 100% Capital in Cash ready for deployment.\n`) +
+    `\n🎯 *Top Lucrative Alternatives:*\n` +
+    (universeCandidates.slice(0, 2).map(c => `• *${c.symbol}:* ${c.pred ? c.pred.probabilityPct : 75}% Breakout Odds (${c.name || c.sector})`).join('\n') || '• VRT & ANET') +
+    `\n\n💡 *Tactical Action:* Type \`swap <FROM> to <TO>\` to reallocate stagnant capital into high-conviction breakout setups.`
+  );
 }
 
 module.exports = {
   deliberateCashReinvestment,
   evaluateOpportunityDeal,
   generatePilotBriefing,
+  auditHoldingsVsAlternatives,
   buildJournalSummary
 };
