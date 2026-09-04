@@ -1140,7 +1140,46 @@ async function askRob(chatId, query) {
     { role: 'user', parts: [{ text: query }] }
   ];
 
-  // 1. Google Gemini API with Multi-Model Fallback Cascade & Persistent Multi-Turn Memory
+  // 1. Groq API (Ultra-Fast LPUs: GPT-120B / Compound / Qwen)
+  const groqKey = process.env.GROQ_API_KEY;
+  if (groqKey) {
+    const candidateGroqModels = ['openai/gpt-oss-120b', 'groq/compound-mini', 'qwen/qwen3.6-27b'];
+    const messages = [
+      { role: 'system', content: systemInstruction },
+      ...conversationHistory.map(h => ({ role: h.role === 'model' ? 'assistant' : 'user', content: h.parts ? h.parts[0].text : (h.content || '') })),
+      { role: 'user', content: query }
+    ];
+    for (const gModel of candidateGroqModels) {
+      try {
+        const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + groqKey
+          },
+          body: JSON.stringify({
+            model: gModel,
+            messages: messages,
+            max_tokens: 600,
+            temperature: 0.6
+          })
+        });
+        const data = await res.json();
+        if (data.choices && data.choices[0] && data.choices[0].message) {
+          let reply = data.choices[0].message.content || '';
+          reply = reply.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+          if (reply) {
+            saveConversationMemory(query, reply);
+            return sendMessage(chatId, '🤖 *Rob (Groq LPUs):*\n\n' + reply, mainMenu);
+          }
+        }
+      } catch (err) {
+        console.error('[GROQ ENGINE ERROR on ' + gModel + ']:', err.message);
+      }
+    }
+  }
+
+  // 2. Google Gemini API with Multi-Model Fallback Cascade & Persistent Multi-Turn Memory
   const geminiKey = process.env.GEMINI_API_KEY || '';
   if (geminiKey) {
     const candidateModels = ['gemini-3.5-flash-lite', 'gemini-3.6-flash', 'gemini-flash-latest'];
