@@ -9,6 +9,7 @@ const { evaluateStockPrediction, checkMarketGovernor } = require('./engine/predi
 const { optimizeWeightsFromHistory } = require('./engine/feedback_optimizer');
 const { scanDailyMoversForDeals, getSectorUniverse, addTickerToSectorRotation } = require('./engine/opportunity_scanner');
 const { loadStrategyInsights, performStrategyReflection } = require('./engine/self_reflection_engine');
+const pilotEngine = require('./engine/pilot_engine');
 
 // Robust .env loader: automatically strips UTF-8 BOM, trims whitespace, handles quotes
 function loadEnv() {
@@ -749,9 +750,13 @@ async function autoReinvestCash(spendableBuyingPower) {
   isRebalancing = true;
   try {
     const heldSymbols = new Set();
+    const activePositions = [];
     const posRes = await callRobinhood('get_equity_positions', { account_number: RH_ACCOUNT });
     if (posRes && posRes.data && posRes.data.positions) {
-      posRes.data.positions.filter(p => parseFloat(p.quantity) > 0).forEach(p => heldSymbols.add(p.symbol));
+      posRes.data.positions.filter(p => parseFloat(p.quantity) > 0).forEach(p => {
+        heldSymbols.add(p.symbol);
+        activePositions.push(p);
+      });
     }
 
     const ordRes = await callRobinhood('get_equity_orders', { account_number: RH_ACCOUNT });
@@ -760,15 +765,55 @@ async function autoReinvestCash(spendableBuyingPower) {
     }
 
     const universeMap = getSectorUniverse();
-    const sectorPriority = Object.keys(universeMap);
-    let targetSym = sectorPriority.find(sym => !heldSymbols.has(sym));
-    if (!targetSym && sectorPriority.length > 0) targetSym = sectorPriority[0];
-    if (!targetSym) return;
+    let candidateSymbols = Object.keys(universeMap).filter(sym => !heldSymbols.has(sym));
+    if (candidateSymbols.length === 0) {
+      candidateSymbols = Object.keys(universeMap);
+    }
 
-    const deployAmount = Math.min(20.00, Math.min(MAX_SINGLE_ORDER_USD, Math.floor(spendableBuyingPower)));
-    if (deployAmount < 5.00) return;
+    // Gather live sensory telemetry for candidate stocks
+    const candidatesTelemetry = [];
+    for (const sym of candidateSymbols.slice(0, 6)) {
+      try {
+        const pred = await evaluateStockPrediction(sym);
+        if (pred && pred.raw) {
+          candidatesTelemetry.push({
+            symbol: sym,
+            name: universeMap[sym]?.name || sym,
+            sector: universeMap[sym]?.sector || 'Hardware Infrastructure',
+            price: pred.raw.curPrice || 0,
+            rsi: pred.raw.rsi || 50,
+            volRatio: pred.raw.volRatio || 1.0,
+            isSqueezing: pred.raw.isSqueezing || false
+          });
+        }
+      } catch (e) {}
+    }
 
-    console.log(`[AUTONOMOUS ENGINE] Auto-deploying $${deployAmount} into ${targetSym}...`);
+    if (candidatesTelemetry.length === 0) return;
+
+    const gov = await checkMarketGovernor();
+
+    // The AI Pilot reads the journal and deliberates the optimal deployment
+    console.log('[AI PILOT] Deliberating capital deployment across candidate setups...');
+    const pilotDecision = await pilotEngine.deliberateCashReinvestment({
+      spendableCash: spendableBuyingPower,
+      openPositions: activePositions,
+      candidatesTelemetry: candidatesTelemetry,
+      marketGovernor: gov
+    });
+
+    if (!pilotDecision || pilotDecision.action !== 'BUY' || !pilotDecision.symbol) {
+      console.log('[AI PILOT] Deliberation resulted in HOLD or no action. Preserving cash.');
+      return;
+    }
+
+    const targetSym = pilotDecision.symbol.toUpperCase();
+    const deployAmount = Math.min(
+      Math.min(MAX_SINGLE_ORDER_USD, Math.floor(spendableBuyingPower)),
+      Math.max(5.00, parseFloat(pilotDecision.amountUSD || 15.00))
+    );
+
+    console.log(`[AI PILOT ENGINE] Executing deliberate $${deployAmount} allocation into ${targetSym}...`);
 
     const res = await callRobinhood('place_equity_order', {
       account_number: RH_ACCOUNT,
@@ -784,20 +829,24 @@ async function autoReinvestCash(spendableBuyingPower) {
       dailyDeployedUSD += deployAmount;
       const ord = res.data;
       const state = ord.state === 'filled' ? '✅ FILLED ON EXCHANGE' : '⏳ QUEUED FOR 9:30 AM MARKET OPEN';
-      await sendMessage(
-        AUTHORIZED_USER_ID,
-        '🤖 *Autonomous Cash Reinvestment Executed!*\n\n' +
-        '• *Action:* BOUGHT `$' + deployAmount.toFixed(2) + '` of `' + targetSym + '`\n' +
-        '• *Sector:* _' + (SECTOR_UNIVERSE[targetSym] ? SECTOR_UNIVERSE[targetSym].sector : 'AI Infrastructure') + '_\n' +
-        '• *Strategy Logic:* Zero cash drag! Automatically deploying fresh cash into underweight bottleneck.\n' +
-        '• *Exchange Status:* ' + state + '\n' +
+      
+      const pilotMsg = 
+        '👨‍✈️ *AI Pilot Order Executed (Journal-Guided)* 🚀\n\n' +
+        '• *Target:* `' + targetSym + '` ($' + deployAmount.toFixed(2) + ')\n' +
+        '• *Sector:* _' + (universeMap[targetSym]?.sector || 'AI Hardware Infrastructure') + '_\n' +
+        '• *Confidence:* `' + (pilotDecision.confidence ? Math.round(pilotDecision.confidence * 100) + '%' : 'High') + '` (' + (pilotDecision.provider || 'AI Pilot') + ')\n\n' +
+        '🧠 *Pilot Thesis:*\n' +
+        '_\"' + (pilotDecision.thesis || 'Deploying fresh cash into bottleneck.') + '\"_\n\n' +
+        '📖 *Learned Journal Connection:*\n' +
+        '_' + (pilotDecision.learnedConnection || 'Aligns with historical risk-managed breakouts.') + '_\n\n' +
+        '• *Status:* ' + state + '\n' +
         '• *Order ID:* `' + ord.id + '`\n\n' +
-        '_Executed autonomously by Cloud Risk Guardian._',
-        mainMenu
-      );
+        '_Guarded 24/7 by -6% Stop Floor & +4% Breakeven Ratchet._';
+
+      await sendMessage(AUTHORIZED_USER_ID, pilotMsg, mainMenu);
     }
   } catch (err) {
-    console.error('Auto-rebalance error:', err.message);
+    console.error('AI Pilot Rebalance error:', err.message);
   } finally {
     isRebalancing = false;
   }
@@ -904,8 +953,8 @@ async function getLivePredictiveRadarReport() {
 const mainMenu = {
   keyboard: [
     [{ text: '📊 Live Portfolio' }, { text: '🎯 Predictive Radar' }],
-    [{ text: '🔍 Movers Scan' }, { text: '🔄 Sector Rotation' }],
-    [{ text: '🛡️ Risk Targets' }, { text: '🔥 Hot Watchlist' }],
+    [{ text: '👨‍✈️ AI Pilot Briefing' }, { text: '🔍 Movers Scan' }],
+    [{ text: '🔄 Sector Rotation' }, { text: '🛡️ Risk Targets' }],
     [{ text: '📰 Market News' }, { text: '💬 Commands Help' }]
   ],
   resize_keyboard: true,
@@ -1330,6 +1379,20 @@ async function handleMessage(msg) {
     return sendMessage(chatId, report, mainMenu);
   }
 
+  // 👨‍✈️ AI PILOT EXECUTIVE BRIEFING
+  if (lower.includes('pilot') || text.includes('👨‍✈️') || lower.includes('briefing') || lower.includes('cockpit')) {
+    await sendMessage(chatId, '👨‍✈️ _Pilot Rob is analyzing cockpit telemetry, consulting the trade flight log, and assessing holding health..._');
+    const p = await callRobinhood('get_portfolio', { account_number: RH_ACCOUNT });
+    const pos = await callRobinhood('get_equity_positions', { account_number: RH_ACCOUNT });
+    const gov = await checkMarketGovernor();
+    const briefing = await pilotEngine.generatePilotBriefing(
+      p && p.data ? p.data : { total_value: 0, cash: 0 },
+      pos && pos.data && pos.data.positions ? pos.data.positions.filter(x => parseFloat(x.quantity) > 0) : [],
+      gov
+    );
+    return sendMessage(chatId, briefing, mainMenu);
+  }
+
   if (lower.includes('scan') || text.includes('🔍') || lower.includes('deal') || lower.includes('opportunity') || text.includes('Movers Scan')) {
     await sendMessage(chatId, '🔍 *Scanning Robinhood Daily Movers...*\n_Evaluating breakout probabilities, RSI buy setups, news catalysts & sector fit..._');
     const scanRes = await scanDailyMoversForDeals(callRobinhood);
@@ -1643,13 +1706,19 @@ async function checkBackgroundOpportunityAlerts() {
       for (const deal of scanRes.qualifiedDeals) {
         if (deal.triggerTelegramAlert) {
           const headline = (deal.newsStories && deal.newsStories[0]) ? deal.newsStories[0].title : 'Positive market momentum';
+          let pilotNote = '';
+          if (deal.pilotEval) {
+            pilotNote = '   • *AI Pilot Rating:* `' + deal.pilotEval.rating + '` (' + Math.round((deal.pilotEval.confidence || 0.8) * 100) + '% confidence)\n' +
+                        '   • *Pilot Catalyst Analysis:* _\"' + deal.pilotEval.catalystAnalysis + '\"_\n';
+          }
           const alertMsg = 
             '🚨 *HIGH-CONVICTION DEAL DETECTED FROM DAILY MOVERS!* 🚀\n\n' +
-            'Our scanner discovered a prime setup with strong fundamentals:\n\n' +
+            'Our scanner & AI Pilot evaluated a prime setup:\n\n' +
             '🔹 *' + deal.symbol + '* — `$' + deal.price.toFixed(2) + '`\n' +
             '   • *Breakout Odds:* `' + deal.probabilityPct + '%` (' + deal.rating + ')\n' +
             '   • *14-Day RSI:* `' + deal.rsi + '` (Healthy Entry Range ✅)\n' +
             '   • *Volume Spike:* `' + deal.volRatio + 'x` Normal Volume\n' +
+            pilotNote +
             '   • *News Catalyst:* _\"' + headline + '\"_ (' + deal.sentiment.label + ')\n' +
             '   • *Status:* 🆕 Added to Sector Rotation Universe!\n\n' +
             '🎯 *Tactical Action:* `' + deal.action + '`\n\n' +

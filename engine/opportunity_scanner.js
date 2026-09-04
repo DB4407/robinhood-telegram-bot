@@ -2,6 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const { evaluateStockPrediction } = require('./predictive_engine');
+const { evaluateOpportunityDeal } = require('./pilot_engine');
 
 const CONFIG_PATH = path.join(__dirname, '..', 'config', 'trading_config.json');
 const MOVERS_WATCHLIST_ID = 'eddbebe5-34cc-4df1-953c-d3e3cb55bc19';
@@ -158,24 +159,41 @@ async function scanDailyMoversForDeals(callRobinhood) {
       };
       scanned.push(candidate);
 
-      // 3. High Conviction Quality Filter
+      // 3. AI Pilot Deliberation & Verification
       const isHighConviction = pred.probability >= 0.70;
       const isMarketSafe = !pred.governor.isRiskOff;
-      const isNewsSafe = sentiment.score >= 0;
 
-      if (isHighConviction && isHealthyRsi && isMarketSafe && isNewsSafe) {
-        // Dynamically add to sector rotation universe
-        const added = addTickerToSectorRotation(sym, sym + ' High Alpha Mover', 'Robinhood Daily Mover Breakout');
-        candidate.isNewAddition = added;
+      if (isHighConviction && isHealthyRsi && isMarketSafe) {
+        const prevClose = pred.raw.prevClose || pred.raw.curPrice;
+        const changePct = prevClose > 0 ? ((pred.raw.curPrice - prevClose) / prevClose) * 100 : 0;
+        const pilotEval = await evaluateOpportunityDeal({
+          symbol: sym,
+          price: pred.raw.curPrice,
+          changePct: changePct,
+          volRatio: pred.raw.volRatio,
+          rsi: rsi,
+          headlines: newsStories,
+          sentiment: sentiment
+        });
 
-        const lastAlert = alertCooldowns.get(sym);
-        const shouldAlert = !lastAlert || (Date.now() - lastAlert > 4 * 3600 * 1000);
-        if (shouldAlert) {
-          alertCooldowns.set(sym, Date.now());
-          candidate.triggerTelegramAlert = true;
+        candidate.pilotEval = pilotEval;
+
+        if (pilotEval.verdict === 'APPROVE') {
+          // Dynamically add to sector rotation universe
+          const added = addTickerToSectorRotation(sym, sym + ' (' + pilotEval.rating + ')', 'AI-Piloted Daily Mover');
+          candidate.isNewAddition = added;
+
+          const lastAlert = alertCooldowns.get(sym);
+          const shouldAlert = !lastAlert || (Date.now() - lastAlert > 4 * 3600 * 1000);
+          if (shouldAlert) {
+            alertCooldowns.set(sym, Date.now());
+            candidate.triggerTelegramAlert = true;
+          }
+
+          qualifiedDeals.push(candidate);
+        } else {
+          console.log(`[AI PILOT SCOUT] Vetoed ${sym}: ${pilotEval.catalystAnalysis || 'Did not meet institutional quality threshold'}`);
         }
-
-        qualifiedDeals.push(candidate);
       }
     } catch (err) {
       console.error('[OPPORTUNITY SCANNER] Error scanning ' + sym + ':', err.message);
