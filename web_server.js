@@ -718,6 +718,117 @@ async function handleWebRequest(req, res) {
     return res.end(JSON.stringify(loadStrategyInsights()));
   }
 
+  // 8b. Full Historical Trade Journal & Telemetry Data API
+  if (pathname === '/api/journal/full') {
+    try {
+      const journalExits = tradeLogger.getCompletedTrades();
+      const insights = loadStrategyInsights();
+      const journalSummary = buildJournalSummary();
+
+      let totalWonUSD = 0;
+      let totalLostUSD = 0;
+      let winPcts = [];
+      let lossPcts = [];
+      let totalDurationHours = 0;
+      let bestTrade = null;
+      let worstTrade = null;
+
+      journalExits.forEach(t => {
+        const pnl = parseFloat(t.realizedPnlUSD || 0);
+        const pnlPct = parseFloat(t.realizedPnlPct || 0);
+        const dur = parseFloat(t.durationHours || 0);
+        totalDurationHours += dur;
+
+        if (pnl >= 0) {
+          totalWonUSD += pnl;
+          winPcts.push(pnlPct);
+        } else {
+          totalLostUSD += Math.abs(pnl);
+          lossPcts.push(pnlPct);
+        }
+
+        if (!bestTrade || pnlPct > bestTrade.pnlPct) {
+          bestTrade = { symbol: t.symbol, pnlUSD: pnl, pnlPct: pnlPct, exitReason: t.exitReason };
+        }
+        if (!worstTrade || pnlPct < worstTrade.pnlPct) {
+          worstTrade = { symbol: t.symbol, pnlUSD: pnl, pnlPct: pnlPct, exitReason: t.exitReason };
+        }
+      });
+
+      const totalTrades = journalExits.length;
+      const profitFactor = totalLostUSD > 0 ? (totalWonUSD / totalLostUSD).toFixed(2) : 'Infinite';
+      const avgDurationHours = totalTrades > 0 ? (totalDurationHours / totalTrades).toFixed(1) : 0;
+      const avgWinPct = winPcts.length > 0 ? (winPcts.reduce((a, b) => a + b, 0) / winPcts.length).toFixed(1) : '0.0';
+      const avgLossPct = lossPcts.length > 0 ? (lossPcts.reduce((a, b) => a + b, 0) / lossPcts.length).toFixed(1) : '0.0';
+
+      let brokerOrders = [];
+      if (botBridge && botBridge.callRobinhood) {
+        try {
+          const rhAccount = botBridge.getRHAccount();
+          const ordRes = await botBridge.callRobinhood('get_equity_orders', { account_number: rhAccount });
+          if (ordRes && ordRes.data && Array.isArray(ordRes.data.orders)) {
+            brokerOrders = ordRes.data.orders.map(o => {
+              const estPrice = parseFloat(o.average_price || o.price || 0);
+              const qty = parseFloat(o.cumulative_quantity || o.quantity || 0);
+              const amt = o.dollar_based_amount ? parseFloat(o.dollar_based_amount.amount) : (qty * estPrice);
+              return {
+                id: o.id,
+                symbol: o.symbol,
+                side: (o.side || 'buy').toUpperCase(),
+                type: o.type,
+                state: o.state,
+                shares: qty,
+                price: estPrice,
+                dollarAmount: amt,
+                createdAt: o.created_at,
+                lastTransactionAt: o.last_transaction_at
+              };
+            });
+          }
+        } catch (rhErr) {
+          console.warn('[JOURNAL API] Robinhood orders note:', rhErr.message);
+        }
+      }
+
+      let modelWeights = null;
+      const weightsPath = path.join(__dirname, 'data', 'model_weights.json');
+      if (fs.existsSync(weightsPath)) {
+        try {
+          modelWeights = JSON.parse(fs.readFileSync(weightsPath, 'utf8'));
+        } catch (e) {}
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({
+        success: true,
+        stats: {
+          totalTrades,
+          wins: winPcts.length,
+          losses: lossPcts.length,
+          winRatePct: totalTrades > 0 ? ((winPcts.length / totalTrades) * 100).toFixed(1) : '100.0',
+          totalRealizedUSD: (totalWonUSD - totalLostUSD).toFixed(2),
+          totalWonUSD: totalWonUSD.toFixed(2),
+          totalLostUSD: totalLostUSD.toFixed(2),
+          profitFactor,
+          avgDurationHours,
+          avgWinPct: `+${avgWinPct}%`,
+          avgLossPct: `${avgLossPct}%`,
+          bestTrade,
+          worstTrade,
+          marketRegime: insights.market_regime || 'Bullish Tech Momentum'
+        },
+        journalSummary,
+        insights,
+        modelWeights,
+        journalExits: journalExits.slice().reverse(),
+        brokerOrders
+      }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: err.message }));
+    }
+  }
+
   // 9. Synthesize / Audit ETF Basket API (Grok LPU Synthesizer)
   if (pathname === '/api/etf/audit' && req.method === 'POST') {
     let body = '';
