@@ -103,6 +103,7 @@ async function synthesizeIndustryBasket(industryNameOrDescription, count = 5) {
       `You are Grok, an institutional quantitative portfolio manager and thematic ETF architect. ` +
       `Construct custom, high-alpha synthetic ETF baskets for target industries. ` +
       `Select ${count} liquid US-listed stocks capturing supply chain bottlenecks and monopoly moats. ` +
+      `Keep descriptions and catalysts concise (under 20 words each). ` +
       `Respond ONLY with a valid JSON object matching this schema:\n` +
       `{\n` +
       `  "industry": "Clean Title of Industry",\n` +
@@ -118,9 +119,14 @@ async function synthesizeIndustryBasket(industryNameOrDescription, count = 5) {
       `  ]\n` +
       `}`;
 
-    const userPrompt = `Target Industry / Horizon: "${industryNameOrDescription}". Construct the optimal high-conviction basket.`;
+    const userPrompt = `Target Industry / Horizon: "${industryNameOrDescription}". Construct the optimal high-conviction basket of ${count} US stocks.`;
 
-    const candidateModels = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b'];
+    const candidateModels = [
+      'llama-3.3-70b-versatile',
+      'openai/gpt-oss-120b',
+      'llama-3.1-8b-instant',
+      'openai/gpt-oss-20b'
+    ];
     for (const m of candidateModels) {
       try {
         const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -135,13 +141,15 @@ async function synthesizeIndustryBasket(industryNameOrDescription, count = 5) {
               { role: 'system', content: systemPrompt },
               { role: 'user', content: userPrompt }
             ],
-            max_tokens: 1200,
+            response_format: { type: 'json_object' },
+            max_tokens: 2048,
             temperature: 0.2
           })
         });
         const data = await res.json();
         if (data.choices && data.choices[0] && data.choices[0].message) {
           let content = data.choices[0].message.content || '';
+          content = content.replace(/<think>[\s\S]*?<\/think>/g, '').trim();
           const match = content.match(/\{[\s\S]*\}/);
           if (match) {
             const parsed = JSON.parse(match[0]);

@@ -68,6 +68,9 @@
     </div>
   </div>
 
+  <!-- FLOATING NOTIFICATION TOAST -->
+  <div id="notificationToast" class="fixed bottom-5 right-5 z-50 hidden px-4 py-3 rounded-xl bg-emerald-500 text-black font-bold text-xs shadow-2xl transition-all duration-300 flex items-center gap-2"></div>
+
   <!-- Top Navigation / User Header -->
   <header class="bg-[#18181b] border border-[#27272a] rounded-2xl p-4 mb-6 shadow-xl flex flex-wrap items-center justify-between gap-4">
     <div class="flex items-center gap-3">
@@ -177,31 +180,17 @@
           </p>
         </div>
         <div class="flex items-center gap-2">
-          <input type="text" id="customIndustryInput" placeholder="Or type custom niche (e.g. 'Sovereign Drone AI')..." 
+          <input type="text" id="customIndustryInput" onkeydown="if(event.key==='Enter') synthesizeCustomTheme()" placeholder="Type custom niche (e.g. 'Sovereign Drone AI')..." 
                  class="bg-[#09090b] text-xs text-white border border-[#27272a] rounded-xl px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-purple-500 w-64">
-          <button onclick="synthesizeCustomTheme()" class="px-3.5 py-1.5 bg-purple-500 hover:bg-purple-400 text-white font-bold text-xs rounded-xl transition flex items-center gap-1">
+          <button onclick="synthesizeCustomTheme()" id="btnSynthesize" class="px-3.5 py-1.5 bg-purple-500 hover:bg-purple-400 text-white font-bold text-xs rounded-xl transition flex items-center gap-1 shadow-md shadow-purple-500/20">
             <span>⚡</span> Synthesize
           </button>
         </div>
       </div>
 
-      <!-- Quick Industry Selector Buttons -->
-      <div class="flex flex-wrap gap-2 mb-4">
-        <button onclick="loadEtfTheme('ai_physical_infrastructure')" id="btn-theme-ai" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition">
-          ⚡ Physical AI & Compute (GIGA)
-        </button>
-        <button onclick="loadEtfTheme('clean_energy_supergrid')" id="btn-theme-energy" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#09090b] text-zinc-400 border border-[#27272a] hover:text-white transition">
-          🔋 Nuclear Baseload & Supergrid (NUKE)
-        </button>
-        <button onclick="loadEtfTheme('autonomous_defense_cyber')" id="btn-theme-cyber" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#09090b] text-zinc-400 border border-[#27272a] hover:text-white transition">
-          🛡️ Autonomous Defense & Cyber (SHLD)
-        </button>
-        <button onclick="loadEtfTheme('space_quantum_frontier')" id="btn-theme-space" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#09090b] text-zinc-400 border border-[#27272a] hover:text-white transition">
-          🚀 Space Economy & Telecom (ORBT)
-        </button>
-        <button onclick="loadEtfTheme('consumer_monopolies_defensive')" id="btn-theme-fort" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#09090b] text-zinc-400 border border-[#27272a] hover:text-white transition">
-          🛒 Cash Flow Titans (FORT)
-        </button>
+      <!-- Quick Industry Selector Buttons (Dynamically Appended) -->
+      <div class="flex flex-wrap gap-2 mb-4 items-center" id="themeButtonsContainer">
+        <!-- Rendered dynamically by renderThemeButtons() -->
       </div>
 
       <!-- Active Synthesized ETF Thesis Banner -->
@@ -563,10 +552,54 @@
 
     let activeThemeKey = 'ai_physical_infrastructure';
 
+    function showNotificationToast(msg, duration = 4000) {
+      const toast = document.getElementById('notificationToast');
+      if (!toast) return;
+      toast.innerHTML = `<span>✨</span> <span>${msg}</span>`;
+      toast.classList.remove('hidden');
+      setTimeout(() => {
+        toast.classList.add('hidden');
+      }, duration);
+    }
+
+    function renderThemeButtons() {
+      const container = document.getElementById('themeButtonsContainer');
+      if (!container) return;
+      container.innerHTML = '';
+
+      const keys = Object.keys(THEMES);
+      keys.forEach(key => {
+        const theme = THEMES[key];
+        const btn = document.createElement('button');
+        btn.id = 'btn-theme-' + key;
+        btn.onclick = () => loadEtfTheme(key);
+
+        const isActive = (key === activeThemeKey);
+        btn.className = isActive
+          ? 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition shadow-sm flex items-center gap-1.5 cursor-pointer'
+          : 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#09090b] text-zinc-400 border border-[#27272a] hover:text-white transition flex items-center gap-1.5 cursor-pointer';
+
+        // Extract emoji and clean title
+        const parts = theme.fullName.split(' ');
+        const firstEmoji = /^\p{Emoji}/u.test(parts[0]) ? parts[0] : (theme.isCustom ? '🤖' : '⚡');
+        const cleanName = theme.fullName.replace(/^\p{Emoji}\s*/u, '').split('&')[0].trim();
+
+        btn.innerHTML = `
+          <span>${firstEmoji}</span>
+          <span>${cleanName}</span>
+          <span class="text-[10px] font-mono px-1 py-0.2 rounded bg-black/40 ${isActive ? 'text-emerald-300 border border-emerald-500/20' : 'text-zinc-500'}">
+            ${theme.etfTicker}
+          </span>
+          ${theme.isCustom ? '<span class="text-[9px] text-purple-400 font-bold ml-0.5">• AI</span>' : ''}
+        `;
+        container.appendChild(btn);
+      });
+    }
+
     function loadEtfTheme(themeKey) {
+      if (!THEMES[themeKey]) return;
       activeThemeKey = themeKey;
       const theme = THEMES[themeKey];
-      if (!theme) return;
 
       // Update Header & Thesis
       document.getElementById('etfBadgeTitle').innerText = theme.etfTicker;
@@ -575,24 +608,17 @@
       document.getElementById('etfCountLabel').innerText = `${theme.tickers.length} Constituent Tickers`;
 
       // Update Tab button active styles
-      const themeBtns = ['ai', 'energy', 'cyber', 'space', 'fort'];
-      const keyMap = {
-        ai_physical_infrastructure: 'ai',
-        clean_energy_supergrid: 'energy',
-        autonomous_defense_cyber: 'cyber',
-        space_quantum_frontier: 'space',
-        consumer_monopolies_defensive: 'fort'
-      };
-      themeBtns.forEach(b => {
-        const btn = document.getElementById('btn-theme-' + b);
-        if (btn) btn.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#09090b] text-zinc-400 border border-[#27272a] hover:text-white transition';
-      });
-      const activeBtnId = 'btn-theme-' + keyMap[themeKey];
-      const activeBtn = document.getElementById(activeBtnId);
-      if (activeBtn) activeBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition';
+      renderThemeButtons();
 
       // Render Table
       renderEtfTable(theme.tickers);
+
+      // Update Rebalance hint
+      const hint = document.getElementById('etfRebalanceHint');
+      if (hint) {
+        const topPick = theme.tickers.find(t => (t.score || t.readinessScore || 0) >= 80) || theme.tickers[0];
+        hint.innerText = `The AI Pilot will evaluate existing non-conforming assets and rotate available capital into top-rated constituent ${topPick ? topPick.symbol : theme.etfTicker}.`;
+      }
     }
 
     function renderEtfTable(tickers) {
@@ -603,26 +629,32 @@
         const tr = document.createElement('tr');
         tr.className = 'hover:bg-zinc-800/50 transition';
 
+        const badge = t.badge || t.readinessBadge || '🟢 SOLID BUY SETUP';
         let badgeClass = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
-        if (t.badge.includes('READY') || t.badge.includes('LEADER')) badgeClass = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
-        else if (t.badge.includes('PRIME')) badgeClass = 'bg-purple-500/20 text-purple-400 border-purple-500/30';
-        else if (t.badge.includes('OVERBOUGHT') || t.badge.includes('ROTATE')) badgeClass = 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+        if (badge.includes('READY') || badge.includes('LEADER') || badge.includes('COILING')) badgeClass = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+        else if (badge.includes('PRIME') || badge.includes('OVERSOLD')) badgeClass = 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+        else if (badge.includes('OVERBOUGHT') || badge.includes('ROTATE')) badgeClass = 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+
+        const price = (t.price !== null && t.price !== undefined) ? Number(t.price).toFixed(2) : '--';
+        const rsi = (t.rsi !== null && t.rsi !== undefined) ? Number(t.rsi).toFixed(1) : '50.0';
+        const prob = (t.prob !== null && t.prob !== undefined) ? Number(t.prob) : (t.probabilityPct !== null && t.probabilityPct !== undefined ? Number(t.probabilityPct) : 75);
+        const note = t.note || t.journalNote || t.catalyst || 'Monopoly supply chain pricing power.';
 
         tr.innerHTML = `
           <td class="p-3 font-bold flex items-center gap-2">
             <span class="text-emerald-400">🔹</span> ${t.symbol} 
-            <span class="text-[10px] text-zinc-400 font-normal">${t.name}</span>
+            <span class="text-[10px] text-zinc-400 font-normal">${t.name || t.symbol}</span>
           </td>
-          <td class="p-3 text-zinc-400">${t.subsector}</td>
-          <td class="p-3 font-semibold">$${t.price.toFixed(2)}</td>
-          <td class="p-3 font-mono ${t.rsi > 70 ? 'text-amber-400 font-bold' : (t.rsi < 45 ? 'text-purple-400 font-bold' : 'text-zinc-300')}">${t.rsi.toFixed(1)}</td>
-          <td class="p-3 font-bold ${t.prob >= 70 ? 'text-emerald-400' : 'text-zinc-300'}">${t.prob}%</td>
+          <td class="p-3 text-zinc-400">${t.subsector || 'Thematic Constituent'}</td>
+          <td class="p-3 font-semibold">$${price}</td>
+          <td class="p-3 font-mono ${rsi > 70 ? 'text-amber-400 font-bold' : (rsi < 45 ? 'text-purple-400 font-bold' : 'text-zinc-300')}">${rsi}</td>
+          <td class="p-3 font-bold ${prob >= 70 ? 'text-emerald-400' : 'text-zinc-300'}">${prob}%</td>
           <td class="p-3">
-            <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${badgeClass} inline-block mb-1">${t.badge}</span>
-            <div class="text-[10px] text-zinc-400 leading-tight">${t.note}</div>
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${badgeClass} inline-block mb-1">${badge}</span>
+            <div class="text-[10px] text-zinc-400 leading-tight">${note}</div>
           </td>
           <td class="p-3 text-right whitespace-nowrap">
-            <button onclick="executeConstituentBuy('${t.symbol}', ${t.price})" class="px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs transition">
+            <button onclick="executeConstituentBuy('${t.symbol}', ${price !== '--' ? price : 50})" class="px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs transition cursor-pointer">
               Buy $15
             </button>
           </td>
@@ -631,26 +663,127 @@
       });
     }
 
-    function synthesizeCustomTheme() {
+    function saveCustomThemesToStorage() {
+      try {
+        const customs = {};
+        for (const [k, v] of Object.entries(THEMES)) {
+          if (v.isCustom) customs[k] = v;
+        }
+        localStorage.setItem('rh_custom_etf_themes', JSON.stringify(customs));
+      } catch (e) {}
+    }
+
+    function loadCustomThemesFromStorage() {
+      try {
+        const stored = localStorage.getItem('rh_custom_etf_themes');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          for (const [k, v] of Object.entries(parsed)) {
+            THEMES[k] = v;
+          }
+        }
+      } catch (e) {}
+    }
+
+    async function fetchServerThemes() {
+      try {
+        const res = await fetch('/api/etf/themes');
+        if (!res.ok) return;
+        const d = await res.json();
+        if (d && Array.isArray(d.custom)) {
+          d.custom.forEach(item => {
+            const key = 'custom_' + (item.etfTicker || item.id).toLowerCase().replace(/[^a-z0-9]/g, '_');
+            THEMES[key] = {
+              etfTicker: item.etfTicker,
+              fullName: `🤖 ${item.title}`,
+              thesis: item.thesis,
+              tickers: (item.tickers || []).map(t => ({
+                symbol: t.symbol,
+                name: t.name,
+                subsector: t.subsector,
+                price: t.price || 100.0,
+                rsi: t.rsi || 50.0,
+                prob: t.probabilityPct || 75.0,
+                badge: t.readinessBadge || '🟢 SOLID BUY SETUP',
+                score: t.readinessScore || 80,
+                note: t.journalNote || t.catalyst || ''
+              })),
+              isCustom: true
+            };
+          });
+          renderThemeButtons();
+        }
+      } catch (e) {
+        console.warn('Failed to fetch server themes:', e.message);
+      }
+    }
+
+    async function synthesizeCustomTheme() {
       const inp = document.getElementById('customIndustryInput');
+      const btn = document.getElementById('btnSynthesize');
       const val = inp.value.trim();
       if (!val) return;
 
-      alert(`⚡ Calling Grok LPU to synthesize custom ETF basket for "${val}"...\n\nAnalyzing US supply chain bottlenecks, monopoly pricing power, and correlating with historical trade journal win patterns.`);
-      
-      // Simulate on-the-fly synthesis
-      THEMES.custom = {
-        etfTicker: 'SYNX',
-        fullName: `Custom: ${val}`,
-        thesis: `Grok thematic index targeting monopoly suppliers and software moats within "${val}". Screened for positive RSI momentum and zero theta drag.`,
-        tickers: [
-          { symbol: 'PLTR', name: 'Palantir Tech', subsector: 'Enterprise AI & Defense', price: 92.15, rsi: 56.4, prob: 84.0, badge: '🚀 READY: COILING BREAKOUT', score: 90, note: 'Grok Top Pick: Structural catalyst acceleration with positive cash flow.' },
-          { symbol: 'VRT', name: 'Vertiv Holdings', subsector: 'Data Center Infrastructure', price: 276.88, rsi: 53.6, prob: 82.6, badge: '🚀 READY: BREAKOUT SETUP', score: 88, note: 'Critical physical hardware supply chain enabler.' },
-          { symbol: 'QCOM', name: 'Qualcomm Inc', subsector: 'Edge Silicon & Connectivity', price: 168.20, rsi: 39.4, prob: 65.0, badge: '💎 PRIME OVERSOLD ACCUMULATION', score: 92, note: 'Deep value multiple with high probability reversal odds.' }
-        ]
-      };
-      loadEtfTheme('custom');
-      inp.value = '';
+      const origText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="inline-block animate-spin">⚡</span> Grok Synthesizing...`;
+
+      try {
+        const token = getAuthToken();
+        const res = await fetch('/api/etf/audit', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({ theme: val })
+        });
+
+        if (!res.ok) throw new Error(`Synthesizer HTTP ${res.status}`);
+
+        const data = await res.json();
+        if (!data || !data.tickers || data.tickers.length === 0) {
+          throw new Error('No constituents returned from synthesizer');
+        }
+
+        const themeKey = 'custom_' + (data.etfTicker || Date.now()).toLowerCase().replace(/[^a-z0-9]/g, '_');
+        const formattedTickers = data.tickers.map(t => ({
+          symbol: t.symbol,
+          name: t.name || t.symbol,
+          subsector: t.subsector || 'Thematic Constituent',
+          price: (t.price !== null && t.price !== undefined) ? parseFloat(t.price) : 100.0,
+          rsi: (t.rsi !== null && t.rsi !== undefined) ? parseFloat(t.rsi) : 50.0,
+          prob: (t.probabilityPct !== null && t.probabilityPct !== undefined) ? parseFloat(t.probabilityPct) : 75.0,
+          badge: t.readinessBadge || '🟢 SOLID BUY SETUP',
+          score: t.readinessScore || 80,
+          note: t.journalNote || t.catalyst || 'Grok selected for supply chain pricing power.'
+        }));
+
+        // Add the new ETF to the batch of already made ones!
+        THEMES[themeKey] = {
+          etfTicker: data.etfTicker || 'SYNX',
+          fullName: `🤖 ${data.industry || val}`,
+          thesis: data.thesis || `Grok thematic index targeting monopoly moats within "${val}".`,
+          tickers: formattedTickers,
+          isCustom: true
+        };
+
+        // Persist
+        saveCustomThemesToStorage();
+
+        // Add to button batch and immediately display
+        renderThemeButtons();
+        loadEtfTheme(themeKey);
+        inp.value = '';
+
+        showNotificationToast(`✅ Grok synthesized [${THEMES[themeKey].etfTicker}] and added it to your ETF horizons!`);
+      } catch (err) {
+        console.error('Synthesis error:', err);
+        alert('Synthesis failed: ' + err.message + '. Please ensure the server is online.');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = origText;
+      }
     }
 
     function executeConstituentBuy(symbol, price) {
@@ -984,8 +1117,11 @@
       }
     }
 
-    // Initialize with default theme and check authentication
+    // Initialize: load stored custom themes, render buttons, load default theme, and check authentication
+    loadCustomThemesFromStorage();
+    renderThemeButtons();
     loadEtfTheme('ai_physical_infrastructure');
+    fetchServerThemes();
     checkAuthSession();
     setInterval(() => {
       if (getAuthToken()) syncLiveBrokerageData();

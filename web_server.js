@@ -7,6 +7,7 @@ const { loadStrategyInsights } = require('./engine/self_reflection_engine');
 
 const PROTOTYPE_HTML_PATH = path.join(__dirname, 'web_interface_prototype.html');
 const CONFIG_PATH = path.join(__dirname, 'config', 'trading_config.json');
+const CUSTOM_THEMES_PATH = path.join(__dirname, 'data', 'custom_etf_themes.json');
 
 let botBridge = null;
 function setBotBridge(bridge) {
@@ -39,6 +40,45 @@ function loadTradingConfig() {
     console.error('Failed to read trading_config.json:', e.message);
   }
   return { circuit_breakers: { max_single_order_usd: 50, min_single_order_usd: 1, max_daily_deploy_usd: 150 } };
+}
+
+function loadCustomThemes() {
+  try {
+    if (fs.existsSync(CUSTOM_THEMES_PATH)) {
+      return JSON.parse(fs.readFileSync(CUSTOM_THEMES_PATH, 'utf8'));
+    }
+  } catch (e) {
+    console.error('Failed to read custom_etf_themes.json:', e.message);
+  }
+  return [];
+}
+
+function saveCustomTheme(scoredTheme) {
+  try {
+    const list = loadCustomThemes();
+    const id = 'custom_' + (scoredTheme.etfTicker || Date.now()).toLowerCase().replace(/[^a-z0-9]/g, '_');
+    const idx = list.findIndex(item => item.id === id || item.etfTicker === scoredTheme.etfTicker);
+    const themeObj = {
+      id: id,
+      etfTicker: scoredTheme.etfTicker,
+      title: scoredTheme.industry,
+      thesis: scoredTheme.thesis,
+      synthesizedBy: scoredTheme.synthesizedBy,
+      journalWinRate: scoredTheme.journalWinRate,
+      tickers: scoredTheme.tickers,
+      createdAt: Date.now()
+    };
+    if (idx >= 0) {
+      list[idx] = themeObj;
+    } else {
+      list.push(themeObj);
+    }
+    const dir = path.dirname(CUSTOM_THEMES_PATH);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(CUSTOM_THEMES_PATH, JSON.stringify(list, null, 2), 'utf8');
+  } catch (e) {
+    console.error('Failed to persist custom theme:', e.message);
+  }
 }
 
 async function handleWebRequest(req, res) {
@@ -246,28 +286,36 @@ async function handleWebRequest(req, res) {
     return;
   }
 
-  // 3. Thematic ETF Horizons API
+  // 7. Thematic ETF Horizons API (Returns Seed Themes + Persisted Custom Themes)
   if (pathname === '/api/etf/themes') {
+    const custom = loadCustomThemes();
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify(DEFAULT_HORIZON_THEMES));
+    return res.end(JSON.stringify({
+      defaults: DEFAULT_HORIZON_THEMES,
+      custom: custom
+    }));
   }
 
-  // 4. Strategy Insights API
+  // 8. Strategy Insights API
   if (pathname === '/api/strategy/insights') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify(loadStrategyInsights()));
   }
 
-  // 5. Synthesize / Audit ETF Basket API
+  // 9. Synthesize / Audit ETF Basket API (Grok LPU Synthesizer)
   if (pathname === '/api/etf/audit' && req.method === 'POST') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
       try {
         const payload = JSON.parse(body || '{}');
-        const themeQuery = payload.theme || 'ai_physical_infrastructure';
+        const themeQuery = payload.theme || payload.niche || 'ai_physical_infrastructure';
         const basket = await synthesizeIndustryBasket(themeQuery, 5);
         const scored = await auditAndScoreBasket(basket);
+
+        // Persist to custom themes storage
+        saveCustomTheme(scored);
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(scored));
       } catch (err) {
