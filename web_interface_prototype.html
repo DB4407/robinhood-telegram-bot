@@ -105,18 +105,30 @@
       </div>
 
       <!-- Quick Metrics Grid -->
-      <div class="grid grid-cols-3 gap-2.5 text-xs">
+      <div class="grid grid-cols-3 sm:grid-cols-6 gap-2 text-xs">
         <div class="bg-[#09090b] p-2.5 rounded-xl border border-[#27272a]">
-          <div class="text-[10px] text-zinc-400">Exit Reason</div>
-          <div class="font-bold text-white mt-0.5" id="mSnapReason">--</div>
+          <div class="text-[10px] text-zinc-400">Entry Price</div>
+          <div class="font-bold font-mono text-zinc-200 mt-0.5" id="mSnapEntryPrice">--</div>
         </div>
         <div class="bg-[#09090b] p-2.5 rounded-xl border border-[#27272a]">
           <div class="text-[10px] text-zinc-400">Exit Price</div>
           <div class="font-bold font-mono text-emerald-400 mt-0.5" id="mSnapPrice">--</div>
         </div>
         <div class="bg-[#09090b] p-2.5 rounded-xl border border-[#27272a]">
+          <div class="text-[10px] text-zinc-400">Executed Shares</div>
+          <div class="font-bold font-mono text-white mt-0.5" id="mSnapShares">--</div>
+        </div>
+        <div class="bg-[#09090b] p-2.5 rounded-xl border border-[#27272a]">
+          <div class="text-[10px] text-zinc-400">Cost ➔ Proceeds</div>
+          <div class="font-bold font-mono text-zinc-300 mt-0.5 text-[11px]" id="mSnapCostProceeds">--</div>
+        </div>
+        <div class="bg-[#09090b] p-2.5 rounded-xl border border-[#27272a]">
           <div class="text-[10px] text-zinc-400">Hold Duration</div>
           <div class="font-bold font-mono text-purple-300 mt-0.5" id="mSnapDuration">--</div>
+        </div>
+        <div class="bg-[#09090b] p-2.5 rounded-xl border border-[#27272a]">
+          <div class="text-[10px] text-zinc-400">Exit Reason</div>
+          <div class="font-bold text-white mt-0.5 text-[11px] truncate" id="mSnapReason">--</div>
         </div>
       </div>
 
@@ -635,18 +647,19 @@
             <thead>
               <tr class="border-b border-[#27272a] bg-[#09090b] text-zinc-400 font-semibold">
                 <th class="p-3">Exit Date & ID</th>
-                <th class="p-3">Symbol</th>
-                <th class="p-3">Exit Action</th>
-                <th class="p-3">Exit Price</th>
+                <th class="p-3">Asset & Shares</th>
+                <th class="p-3">Exit Reason</th>
+                <th class="p-3">Entry ➔ Exit Price</th>
+                <th class="p-3">Cost ➔ Proceeds</th>
                 <th class="p-3">Realized P&L ($ / %)</th>
-                <th class="p-3">Hold Duration</th>
-                <th class="p-3">Pre-Trade Odds</th>
-                <th class="p-3">Telemetry Snapshot (Vol, RSI, Squeeze)</th>
+                <th class="p-3">Hold Time</th>
+                <th class="p-3">Win Odds</th>
+                <th class="p-3">Telemetry</th>
                 <th class="p-3 text-right">Inspect</th>
               </tr>
             </thead>
             <tbody id="journalExitsTableBody" class="divide-y divide-[#27272a]">
-              <tr><td colspan="9" class="p-8 text-center text-zinc-400">Loading journal records...</td></tr>
+              <tr><td colspan="10" class="p-8 text-center text-zinc-400">Loading journal records...</td></tr>
             </tbody>
           </table>
         </div>
@@ -1211,34 +1224,30 @@
         return;
       }
 
-      const topPick = theme.tickers.find(t => (t.score || t.readinessScore || 0) >= 80) || theme.tickers[0];
-      const spendableCash = (window.lastSyncedSpendableCash !== undefined) ? window.lastSyncedSpendableCash : 7.26;
-      
       const positions = window.livePositions || [];
-      const stagnantPos = positions.find(p => p.symbol === 'WMT' || p.symbol === 'TYRA' || p.unrealized_pnl_pct < -2);
-      const liquidateSym = stagnantPos ? stagnantPos.symbol : '';
+      const holdingsCount = positions.length;
+      const holdingsNames = positions.map(p => p.symbol).join(', ') || 'None';
+      const intradayHoldings = positions.filter(p => parseFloat(p.intraday_quantity || 0) > 0).map(p => p.symbol);
+      const targetConstituentsNames = theme.tickers.map(t => t.symbol).join(', ');
+      const spendableCash = (window.lastSyncedSpendableCash !== undefined) ? window.lastSyncedSpendableCash : 7.26;
 
-      const targetAllocation = spendableCash >= 1.00 
-        ? Math.min(15.00, Math.max(1.00, Math.floor((spendableCash - 0.08) * 100) / 100))
-        : 15.00;
-
-      if (spendableCash < 1.00 && !liquidateSym) {
-        alert(`❌ Cannot rebalance: Spendable cash is $${spendableCash.toFixed(2)} and no stagnant positions were found to rotate from. Please sell an active holding to free up capital.`);
-        return;
-      }
+      const pdtWarning = intradayHoldings.length > 0
+        ? `\n⚠️ FINRA Day Trade Advisory: ${intradayHoldings.join(', ')} were purchased today. Liquidating them now will count as day trades on your limited margin account.\n`
+        : '';
 
       const confirmed = confirm(
-        `⚡ CONFIRM TACTICAL BASKET REBALANCE\n\n` +
-        `• ETF Horizon: [${theme.etfTicker}] ${theme.fullName}\n` +
-        `• Target Accumulation: $${targetAllocation.toFixed(2)} of top-rated ${topPick.symbol} (~$${Number(topPick.price || 0).toFixed(2)})\n` +
+        `⚡ CONFIRM FULL PORTFOLIO REBALANCE & ETF INCEPTION\n\n` +
+        `• Target Thematic Horizon: [${theme.etfTicker}] ${theme.fullName}\n` +
+        `• Liquidation Phase: Liquidates ALL ${holdingsCount} active holdings (${holdingsNames}) to consolidate capital\n` +
+        `• Deployment Phase: Allocates 100% of unlocked liquidity into target ETF constituents (${targetConstituentsNames})\n` +
         `• Available Cash: $${spendableCash.toFixed(2)}\n` +
-        (liquidateSym ? `• Rotation Trigger: Liquidates non-conforming holding ${liquidateSym} first\n` : `• Capital Source: Deploys available liquidity directly\n`) +
-        `• Risk Protection: Auto-trailing ratchets applied\n\n` +
-        `Execute this rebalance order sequence on Robinhood now?`
+        pdtWarning +
+        `• Risk Protection: Auto-trailing ratchets & circuit breakers active\n\n` +
+        `Execute this complete portfolio reset and rotation on Robinhood now?`
       );
       if (!confirmed) return;
 
-      showNotificationToast(`⚡ Transmitting tactical basket rebalance into ${topPick.symbol} on Robinhood...`, 7000);
+      showNotificationToast(`⚡ Liquidating portfolio & rotating into ${theme.etfTicker} constituents on Robinhood...`, 10000);
 
       try {
         const res = await fetch('/api/orders/rebalance', {
@@ -1249,18 +1258,19 @@
           },
           body: JSON.stringify({
             themeTicker: theme.etfTicker,
-            targetSymbol: topPick.symbol,
-            amountUSD: targetAllocation,
-            liquidateSymbol: liquidateSym
+            themeKey: activeThemeKey,
+            constituents: theme.tickers,
+            fullLiquidation: true
           })
         });
 
         const data = await res.json();
         if (res.ok && data.success) {
-          showNotificationToast(`✅ ${data.message || 'Basket rebalance completed successfully!'}`, 7000);
+          showNotificationToast(`✅ ${data.message || 'Basket rebalance completed successfully!'}`, 9000);
           setTimeout(syncLiveBrokerageData, 1500);
+          setTimeout(fetchJournalData, 2000);
         } else {
-          alert(`❌ Rebalance Execution Failed:\n\n${data.error || 'Server rejected rebalance request.'}`);
+          alert(`❌ Rebalance Execution Notice:\n\n${data.error || data.message || 'Server rejected rebalance request.'}`);
         }
       } catch (err) {
         alert(`❌ Rebalance Network Error: ${err.message}`);
@@ -1280,10 +1290,15 @@
         return;
       }
 
+      const matchedPos = (window.livePositions || []).find(p => p.symbol === symbol);
+      const isIntraday = matchedPos && parseFloat(matchedPos.intraday_quantity || 0) > 0;
+      const pdtWarning = isIntraday ? `\n⚠️ FINRA Day Trade Advisory: ${symbol} was purchased today. Liquidating it now will count toward your day-trade limit.\n` : '';
+
       const confirmed = confirm(
         `💸 CONFIRM MARKET LIQUIDATION\n\n` +
         `• Symbol: ${symbol}\n` +
         `• Quantity: ${cleanShares} shares\n` +
+        pdtWarning +
         `• Action: Full Market Sell Order\n\n` +
         `Proceeds will be converted into spendable cash reserve in your Robinhood account. Proceed?`
       );
@@ -1314,7 +1329,9 @@
     }
 
     // TAB SWITCHING
+    let currentActiveTab = 'etf';
     function setTab(tabName) {
+      currentActiveTab = tabName;
       const tabs = ['etf', 'holdings', 'radar', 'pilot', 'journal', 'security'];
       tabs.forEach(t => {
         const el = document.getElementById('tab-' + t);
@@ -1328,7 +1345,19 @@
       if (activeBtn) activeBtn.className = 'px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-500 text-black shadow-sm transition shrink-0';
 
       if (tabName === 'journal') {
+        if (window.journalFullData) {
+          renderJournalExits(window.journalFullData.journalExits || []);
+          renderJournalOrders(window.journalFullData.brokerOrders || []);
+          renderJournalWeights(window.journalFullData.modelWeights?.features || (window.journalFullData.insights && window.journalFullData.insights.active_weights), window.journalFullData.modelWeights);
+          renderJournalHeuristics(window.journalFullData.insights);
+        }
         fetchJournalData();
+      } else if (tabName === 'holdings') {
+        if (window.livePositions) renderHoldingsCards(window.livePositions);
+      } else if (tabName === 'radar') {
+        fetchBreakoutRadar();
+      } else if (tabName === 'pilot') {
+        syncRestructureFeed();
       }
     }
 
@@ -1376,11 +1405,13 @@
           document.getElementById('jBrokerOrderCount').innerText = `${data.brokerOrders.length} Executions`;
         }
 
-        // Render Sub-Views
-        renderJournalExits(data.journalExits || []);
-        renderJournalOrders(data.brokerOrders || []);
-        renderJournalWeights(data.modelWeights?.features || (data.insights && data.insights.active_weights), data.modelWeights);
-        renderJournalHeuristics(data.insights);
+        // Only build and repaint the detailed journal DOM tables if the user is currently on the journal tab
+        if (currentActiveTab === 'journal') {
+          renderJournalExits(data.journalExits || []);
+          renderJournalOrders(data.brokerOrders || []);
+          renderJournalWeights(data.modelWeights?.features || (data.insights && data.insights.active_weights), data.modelWeights);
+          renderJournalHeuristics(data.insights);
+        }
 
         // Update Pilot tab badge if exists
         const pilotWinBadge = document.getElementById('journalWinRateBadge');
@@ -1444,12 +1475,12 @@
       const tbody = document.getElementById('journalExitsTableBody');
       if (!tbody) return;
       if (!exits || exits.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="9" class="p-8 text-center text-zinc-400">No journal exit records matched current filter criteria.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" class="p-8 text-center text-zinc-400">No journal exit records matched current filter criteria.</td></tr>`;
         return;
       }
 
       tbody.innerHTML = exits.map(t => {
-        const isWin = parseFloat(t.realizedPnlPct || 0) >= 0;
+        const isWin = parseFloat(t.realizedPnlUSD || t.realizedPnlPct || 0) >= 0;
         const pnlUSD = parseFloat(t.realizedPnlUSD || 0);
         const pnlPct = parseFloat(t.realizedPnlPct || 0);
         const sign = isWin ? '+' : '';
@@ -1457,51 +1488,68 @@
 
         let actionBadge = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
         if (t.exitReason === 'STOP_LOSS') actionBadge = 'bg-rose-500/20 text-rose-400 border-rose-500/30';
-        else if (t.exitReason === 'THEMATIC_REBALANCE') actionBadge = 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+        else if (t.exitReason === 'BREAKEVEN_TRIM') actionBadge = 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+        else if (t.exitReason === 'THEMATIC_REBALANCE' || t.exitReason === 'ETF_REBALANCE_LIQUIDATION' || t.exitReason === 'THEMATIC_REBALANCE_LIQUIDATION') actionBadge = 'bg-purple-500/20 text-purple-400 border-purple-500/30';
 
-        const prob = t.predictedProbability ? `${(Number(t.predictedProbability) * 100).toFixed(1)}%` : '80.0%';
+        const prob = t.predictedProbability ? `${(Number(t.predictedProbability) * 100).toFixed(1)}%` : '78.5%';
         const f = t.features || {};
         const volStr = f.volumeAnomaly ? `${Number(f.volumeAnomaly).toFixed(2)}x` : '1.2x';
         const rsiStr = f.rsiState !== undefined ? Number(f.rsiState).toFixed(2) : '-0.20';
         const sqzStr = f.volatilitySqueeze ? '⚡ Squeeze' : 'Normal';
 
         const d = t.timestamp ? new Date(t.timestamp) : new Date();
-        const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
         const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+
+        const sharesStr = t.shares ? `${Number(t.shares).toFixed(3)} sh` : '';
+        const entryPriceStr = t.entryPrice ? `$${Number(t.entryPrice).toFixed(2)}` : 'N/A';
+        const exitPriceStr = `$${Number(t.exitPrice || 0).toFixed(2)}`;
+        const costBasisStr = t.costBasis ? `$${Number(t.costBasis).toFixed(2)}` : '';
+        const exitValStr = (t.shares && t.exitPrice) ? `$${(Number(t.shares) * Number(t.exitPrice)).toFixed(2)}` : (t.costBasis ? `$${(Number(t.costBasis) + pnlUSD).toFixed(2)}` : '');
 
         return `
           <tr class="hover:bg-zinc-800/50 transition">
             <td class="p-3">
               <div class="font-semibold text-white">${dateStr}</div>
-              <div class="text-[10px] font-mono text-zinc-500">${timeStr} • ${t.id}</div>
+              <div class="text-[10px] font-mono text-zinc-500">${timeStr}</div>
             </td>
             <td class="p-3">
-              <span class="px-2 py-0.5 rounded bg-zinc-800 text-white font-black text-xs border border-zinc-700">
-                ${t.symbol}
-              </span>
+              <div class="flex items-center gap-1.5">
+                <span class="px-2 py-0.5 rounded bg-zinc-800 text-white font-black text-xs border border-zinc-700">
+                  ${t.symbol}
+                </span>
+                ${sharesStr ? `<span class="text-[11px] font-mono text-zinc-400">${sharesStr}</span>` : ''}
+              </div>
             </td>
             <td class="p-3">
               <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${actionBadge}">
                 ${t.exitReason || 'TAKE_PROFIT'}
               </span>
             </td>
-            <td class="p-3 font-mono font-semibold text-white">$${Number(t.exitPrice || 0).toFixed(2)}</td>
+            <td class="p-3 font-mono text-xs">
+              <span class="text-zinc-400">${entryPriceStr}</span>
+              <span class="text-zinc-500 mx-1">➔</span>
+              <span class="font-semibold text-white">${exitPriceStr}</span>
+            </td>
+            <td class="p-3 font-mono text-xs">
+              ${costBasisStr ? `<span class="text-zinc-400">${costBasisStr}</span><span class="text-zinc-500 mx-1">➔</span><span class="font-semibold text-zinc-200">${exitValStr}</span>` : `<span class="text-zinc-500">—</span>`}
+            </td>
             <td class="p-3">
               <span class="font-bold font-mono text-xs ${isWin ? 'text-emerald-400' : 'text-rose-400'}">
                 ${sign}$${pnlUSD.toFixed(2)} (${sign}${pnlPct.toFixed(2)}%)
               </span>
             </td>
-            <td class="p-3 text-zinc-300 font-mono">${dur}h</td>
+            <td class="p-3 text-zinc-300 font-mono">${dur.toFixed(1)}h</td>
             <td class="p-3">
               <span class="px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20 font-mono text-[11px]">
-                ${prob} Odds
+                ${prob}
               </span>
             </td>
             <td class="p-3">
-              <div class="flex items-center gap-1.5 flex-wrap">
-                <span class="text-[10px] px-1.5 py-0.2 rounded bg-[#09090b] border border-zinc-800 text-zinc-300 font-mono">Vol ${volStr}</span>
-                <span class="text-[10px] px-1.5 py-0.2 rounded bg-[#09090b] border border-zinc-800 text-purple-300 font-mono">RSI ${rsiStr}</span>
-                <span class="text-[10px] px-1.5 py-0.2 rounded ${f.volatilitySqueeze ? 'bg-amber-500/10 border border-amber-500/20 text-amber-300' : 'bg-[#09090b] border border-zinc-800 text-zinc-500'} font-mono">${sqzStr}</span>
+              <div class="flex items-center gap-1 flex-wrap">
+                <span class="text-[9px] px-1 py-0.2 rounded bg-[#09090b] border border-zinc-800 text-zinc-300 font-mono">Vol ${volStr}</span>
+                <span class="text-[9px] px-1 py-0.2 rounded bg-[#09090b] border border-zinc-800 text-purple-300 font-mono">RSI ${rsiStr}</span>
+                ${f.volatilitySqueeze ? '<span class="text-[9px] px-1 py-0.2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-300 font-mono">⚡ Sqz</span>' : ''}
               </div>
             </td>
             <td class="p-3 text-right">
@@ -1648,8 +1696,19 @@
       pnlBadge.className = `text-xs px-2 py-0.5 rounded font-bold ${isWin ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'}`;
 
       document.getElementById('mSnapReason').innerText = trade.exitReason || 'TAKE_PROFIT';
+      if (document.getElementById('mSnapEntryPrice')) {
+        document.getElementById('mSnapEntryPrice').innerText = trade.entryPrice ? `$${Number(trade.entryPrice).toFixed(2)}` : 'N/A';
+      }
       document.getElementById('mSnapPrice').innerText = `$${Number(trade.exitPrice || 0).toFixed(2)}`;
-      document.getElementById('mSnapDuration').innerText = `${Number(trade.durationHours || 0).toFixed(0)} Hours`;
+      if (document.getElementById('mSnapShares')) {
+        document.getElementById('mSnapShares').innerText = trade.shares ? `${Number(trade.shares).toFixed(4)} sh` : 'N/A';
+      }
+      if (document.getElementById('mSnapCostProceeds')) {
+        const costStr = trade.costBasis ? `$${Number(trade.costBasis).toFixed(2)}` : 'N/A';
+        const procStr = (trade.shares && trade.exitPrice) ? `$${(Number(trade.shares) * Number(trade.exitPrice)).toFixed(2)}` : 'N/A';
+        document.getElementById('mSnapCostProceeds').innerText = `${costStr} ➔ ${procStr}`;
+      }
+      document.getElementById('mSnapDuration').innerText = `${Number(trade.durationHours || 0).toFixed(1)} Hours`;
 
       const grid = document.getElementById('mSnapFeaturesGrid');
       const f = trade.features || {};
@@ -1756,9 +1815,14 @@
       });
     }
 
+    let lastTickerTapeSig = '';
     function renderTickerTape(candidates) {
       const track = document.getElementById('tickerTapeTrack');
       if (!track || !candidates || candidates.length === 0) return;
+
+      const sig = candidates.map(c => `${c.symbol}_${c.price}_${c.changePct}`).join('|');
+      if (sig === lastTickerTapeSig) return;
+      lastTickerTapeSig = sig;
 
       const items = [...candidates, ...candidates];
       track.innerHTML = items.map(c => {
@@ -2157,10 +2221,12 @@
       `;
     }
 
+    let lastHoldingsSig = '';
     function renderHoldingsCards(positions) {
       const container = document.getElementById('holdingsContainer');
       if (!container) return;
       if (!positions || positions.length === 0) {
+        lastHoldingsSig = 'empty';
         const countEl = document.getElementById('holdingsCount');
         if (countEl) countEl.innerText = '0';
         container.innerHTML = `
@@ -2172,6 +2238,10 @@
         `;
         return;
       }
+
+      const sig = positions.map(p => `${p.symbol}_${p.quantity}_${p.current_price}_${p.unrealized_pnl_usd}`).join('|');
+      if (sig === lastHoldingsSig) return;
+      lastHoldingsSig = sig;
 
       const countEl = document.getElementById('holdingsCount');
       if (countEl) countEl.innerText = positions.length;
@@ -2201,6 +2271,11 @@
         const stopFloor = pos.stop_floor ? parseFloat(pos.stop_floor).toFixed(2) : (avgBuy * 0.94).toFixed(2);
         const ratchet = pos.ratchet_price ? parseFloat(pos.ratchet_price).toFixed(2) : (avgBuy * 1.04).toFixed(2);
 
+        const isIntraday = parseFloat(pos.intraday_quantity || 0) > 0;
+        const dayTradeBadge = isIntraday
+          ? `<span class="text-[9px] px-1.5 py-0.5 rounded font-mono font-semibold bg-amber-500/15 text-amber-300 border border-amber-500/30" title="Purchased today — selling counts toward FINRA day-trade limits">Intraday</span>`
+          : `<span class="text-[9px] px-1.5 py-0.5 rounded font-mono text-zinc-400 border border-zinc-800" title="Held overnight — selling does NOT count as a day trade">Overnight</span>`;
+
         card.innerHTML = `
           <div>
             <div class="flex justify-between items-start mb-2">
@@ -2210,6 +2285,7 @@
                   <span class="text-[10px] px-2 py-0.5 rounded font-bold border ${isProfitable ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}">
                     ${isProfitable ? '▲ +' : '▼ '}${pnlPct.toFixed(2)}%
                   </span>
+                  ${dayTradeBadge}
                 </div>
                 <div class="text-[11px] text-zinc-400 font-mono mt-0.5">
                   ${qty} shs • Avg $${avgBuy.toFixed(2)}
@@ -2371,12 +2447,22 @@
     fetchBreakoutRadar();
     syncRestructureFeed();
     fetchJournalData();
+    // Staggered, non-blocking polling intervals to eliminate lag and prevent network congestion
+    setInterval(() => {
+      if (getAuthToken()) syncLiveBrokerageData();
+    }, 20000); // 20s: Live portfolio, cash & positions
+
     setInterval(() => {
       fetchBreakoutRadar();
+    }, 45000); // 45s: Breakout Radar & Ticker Tape
+
+    setInterval(() => {
       syncRestructureFeed();
+    }, 60000); // 60s: Pilot Restructuring Feed
+
+    setInterval(() => {
       fetchJournalData();
-      if (getAuthToken()) syncLiveBrokerageData();
-    }, 20000);
+    }, 60000); // 60s: Historical journal data
   </script>
 </body>
 </html>
