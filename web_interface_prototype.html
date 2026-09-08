@@ -834,8 +834,28 @@
       }, 400);
     }
 
-    // Initialize with default theme
+    // Live Brokerage Portfolio Sync with Robinhood
+    async function syncLiveBrokerageData() {
+      try {
+        const res = await fetch('/api/portfolio/live');
+        if (!res.ok) return;
+        const d = await res.json();
+        if (d.connected) {
+          if (d.totalEquity > 0) document.getElementById('valTotal').innerText = '$' + d.totalEquity.toFixed(2);
+          if (d.spendableCash >= 0) document.getElementById('valCash').innerText = '$' + d.spendableCash.toFixed(2);
+          if (d.userName) document.getElementById('userNameDisplay').innerText = d.userName + ' (Live Session)';
+          if (d.telegramId) document.getElementById('userSubText').innerText = `Telegram: ${d.telegramId} • Account: ${d.rhAccount}`;
+          console.log('✅ Real-Time Robinhood Portfolio Synced:', d);
+        }
+      } catch (err) {
+        console.warn('Portfolio sync note:', err.message);
+      }
+    }
+
+    // Initialize with default theme and live sync
     loadEtfTheme('ai_physical_infrastructure');
+    syncLiveBrokerageData();
+    setInterval(syncLiveBrokerageData, 15000);
   </script>
 </body>
 </html>

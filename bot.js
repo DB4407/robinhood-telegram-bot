@@ -36,7 +36,7 @@ function loadEnv() {
 loadEnv();
 
 // Modular Web Dashboard & API Server
-const { handleWebRequest } = require('./web_server');
+const { handleWebRequest, setBotBridge } = require('./web_server');
 const PORT = process.env.PORT || 10000;
 http.createServer((req, res) => {
   handleWebRequest(req, res);
@@ -1990,5 +1990,17 @@ async function startPolling() {
     }
   }
 }
+
+const botExports = {
+  getLivePortfolioReport,
+  getLiveHoldingsAuditReport,
+  callRobinhood,
+  getRHAccount: () => RH_ACCOUNT,
+  getUserName: () => USER_NAME,
+  getTelegramId: () => AUTHORIZED_USER_ID
+};
+
+setBotBridge(botExports);
+module.exports = botExports;
 
 startPolling();
