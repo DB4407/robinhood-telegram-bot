@@ -260,7 +260,27 @@
   </div>
 
   <!-- TAB 1: ACTIVE HOLDINGS WITH LIVE CHARTS -->
-  <div id="tab-holdings" class="hidden space-y-6">
+  <div id="tab-holdings" class="hidden space-y-4">
+    <div class="flex flex-wrap items-center justify-between gap-3 bg-[#18181b] border border-[#27272a] rounded-xl p-3.5 shadow-sm">
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-sm">
+          📊
+        </div>
+        <div>
+          <h3 class="font-bold text-xs text-white flex items-center gap-2">
+            <span>Robinhood Active Holdings</span>
+            <span class="text-[10px] px-2 py-0.2 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-mono font-bold">
+              <span id="holdingsCount">--</span> Live Positions
+            </span>
+          </h3>
+          <p class="text-[11px] text-zinc-400">Real-time quotes, 7-day historical price sparklines, and instant order dispatch to Robinhood.</p>
+        </div>
+      </div>
+      <button onclick="syncLiveBrokerageData()" class="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-semibold rounded-lg border border-zinc-700 transition flex items-center gap-1.5 cursor-pointer">
+        <span>🔄</span> Refresh Telemetry
+      </button>
+    </div>
+
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="holdingsContainer">
       <div class="col-span-1 md:col-span-3 bg-[#18181b] border border-[#27272a] rounded-2xl p-8 text-center" id="holdingsEmptyState">
         <div class="text-3xl mb-2">💼</div>
@@ -309,7 +329,7 @@
               <td class="p-3 text-amber-400 font-medium">⚡ Squeeze Coiling</td>
               <td class="p-3">1.48x</td>
               <td class="p-3 text-right">
-                <button onclick="alert('Queued BUY $15 of VRT on user Robinhood account')" class="px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs transition">
+                <button onclick="executeConstituentBuy('VRT', 276.88, 15)" class="px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs transition cursor-pointer">
                   Buy $15
                 </button>
               </td>
@@ -326,7 +346,7 @@
               <td class="p-3 text-amber-400 font-medium">⚡ Squeeze Coiling</td>
               <td class="p-3">1.56x</td>
               <td class="p-3 text-right">
-                <button onclick="alert('Queued BUY $15 of CRWD on user Robinhood account')" class="px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs transition">
+                <button onclick="executeConstituentBuy('CRWD', 212.48, 15)" class="px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs transition cursor-pointer">
                   Buy $15
                 </button>
               </td>
@@ -343,7 +363,7 @@
               <td class="p-3 text-amber-400 font-medium">⚡ Squeeze Coiling</td>
               <td class="p-3">1.12x</td>
               <td class="p-3 text-right">
-                <button onclick="alert('Queued BUY $10 of ANET on user Robinhood account')" class="px-2.5 py-1 rounded bg-zinc-700 hover:bg-zinc-600 text-white font-bold text-xs transition">
+                <button onclick="executeConstituentBuy('ANET', 192.08, 10)" class="px-2.5 py-1 rounded bg-zinc-700 hover:bg-zinc-600 text-white font-bold text-xs transition cursor-pointer">
                   Buy $10
                 </button>
               </td>
@@ -786,17 +806,146 @@
       }
     }
 
-    function executeConstituentBuy(symbol, price) {
-      if (confirm(`Execute $15.00 Market Order for ${symbol} on Robinhood?\n\n• Price: $${price.toFixed(2)}\n• Risk Guard: -6% stop-loss floor active\n• Ratchet: +4% breakeven trigger`)) {
-        alert(`✅ Order Dispatched to Robinhood Exchange!\nAccumulated $15.00 of ${symbol}. Flight recorder updated.`);
+    async function executeConstituentBuy(symbol, price, amountUSD = 15.00) {
+      const token = getAuthToken();
+      if (!token) {
+        alert('Please unlock your operator session first before placing orders.');
+        return;
+      }
+
+      const cleanPrice = (price && price !== '--' && !isNaN(price)) ? Number(price).toFixed(2) : 'Market';
+      const cleanAmt = parseFloat(amountUSD || 15);
+      const confirmed = confirm(
+        `🚀 DISPATCH LIVE MARKET BUY ORDER\n\n` +
+        `• Ticker: ${symbol}\n` +
+        `• Allocation: $${cleanAmt.toFixed(2)} USD\n` +
+        `• Reference Price: $${cleanPrice}\n` +
+        `• Safety Circuit: -6% stop-loss floor active\n` +
+        `• Ratchet: +4% breakeven trigger\n\n` +
+        `Transmit this live order directly to your Robinhood account?`
+      );
+      if (!confirmed) return;
+
+      showNotificationToast(`⏳ Transmitting $${cleanAmt.toFixed(2)} market buy for ${symbol} to Robinhood...`, 6000);
+
+      try {
+        const res = await fetch('/api/orders/buy', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ symbol: symbol, amountUSD: cleanAmt })
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showNotificationToast(`🚀 LIVE ORDER DISPATCHED: $${cleanAmt.toFixed(2)} of ${symbol}! (State: ${data.order?.state || 'queued'})`, 6000);
+          setTimeout(syncLiveBrokerageData, 1200);
+        } else {
+          alert(`❌ Robinhood Buy Order Failed:\n\n${data.error || 'The broker exchange declined the order.'}`);
+        }
+      } catch (err) {
+        alert(`❌ Network Connection Error: ${err.message}`);
       }
     }
 
-    function executeBasketRebalance() {
+    async function executeBasketRebalance() {
+      const token = getAuthToken();
+      if (!token) {
+        alert('Please unlock your operator session first before rebalancing.');
+        return;
+      }
+
       const theme = THEMES[activeThemeKey];
-      const topPick = theme.tickers.find(t => t.score >= 85) || theme.tickers[0];
-      if (confirm(`Confirm Autonomous Restructure into [${theme.etfTicker}] ${theme.fullName}?\n\n• SELL: Stagnant retail holding WMT ($16.08 proceeds)\n• BUY: Top-rated constituent ${topPick.symbol} ($16.08)\n• REASON: Aligning 100% of capital with active thematic ETF index mandate.`)) {
-        alert(`✅ Tactical Restructure Executed on Robinhood!\nWMT liquidated and ${topPick.symbol} accumulated. Active thematic ETF mandate now locked to ${theme.etfTicker}.`);
+      if (!theme || !theme.tickers || theme.tickers.length === 0) {
+        alert('No active thematic basket selected.');
+        return;
+      }
+
+      const topPick = theme.tickers.find(t => (t.score || t.readinessScore || 0) >= 80) || theme.tickers[0];
+      const confirmed = confirm(
+        `⚡ CONFIRM TACTICAL BASKET REBALANCE\n\n` +
+        `• ETF Horizon: [${theme.etfTicker}] ${theme.fullName}\n` +
+        `• Target Accumulation: $15.00 of top-rated ${topPick.symbol} (~$${Number(topPick.price || 0).toFixed(2)})\n` +
+        `• Rotation Trigger: Liquidates non-thematic retail holdings (e.g. WMT if held)\n` +
+        `• Risk Protection: Auto-trailing ratchets applied\n\n` +
+        `Execute this rebalance order sequence on Robinhood now?`
+      );
+      if (!confirmed) return;
+
+      showNotificationToast(`⚡ Transmitting tactical basket rebalance into ${topPick.symbol} on Robinhood...`, 7000);
+
+      try {
+        const res = await fetch('/api/orders/rebalance', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            themeTicker: theme.etfTicker,
+            targetSymbol: topPick.symbol,
+            amountUSD: 15.00,
+            liquidateSymbol: 'WMT'
+          })
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showNotificationToast(`✅ ${data.message || 'Basket rebalance completed successfully!'}`, 7000);
+          setTimeout(syncLiveBrokerageData, 1500);
+        } else {
+          alert(`❌ Rebalance Execution Failed:\n\n${data.error || 'Server rejected rebalance request.'}`);
+        }
+      } catch (err) {
+        alert(`❌ Rebalance Network Error: ${err.message}`);
+      }
+    }
+
+    async function executePositionSell(symbol, shares) {
+      const token = getAuthToken();
+      if (!token) {
+        alert('Please unlock your operator session first.');
+        return;
+      }
+
+      const cleanShares = parseFloat(shares || 0);
+      if (cleanShares <= 0) {
+        alert('Invalid share quantity to liquidate.');
+        return;
+      }
+
+      const confirmed = confirm(
+        `💸 CONFIRM MARKET LIQUIDATION\n\n` +
+        `• Symbol: ${symbol}\n` +
+        `• Quantity: ${cleanShares} shares\n` +
+        `• Action: Full Market Sell Order\n\n` +
+        `Proceeds will be converted into spendable cash reserve in your Robinhood account. Proceed?`
+      );
+      if (!confirmed) return;
+
+      showNotificationToast(`⏳ Transmitting market sell for ${cleanShares} shares of ${symbol}...`, 6000);
+
+      try {
+        const res = await fetch('/api/orders/sell', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({ symbol: symbol, shares: cleanShares })
+        });
+
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showNotificationToast(`💸 SELL EXECUTED: Liquidated ${cleanShares} shares of ${symbol}! (State: ${data.order?.state || 'queued'})`, 6000);
+          setTimeout(syncLiveBrokerageData, 1200);
+        } else {
+          alert(`❌ Robinhood Sell Order Failed:\n\n${data.error || 'The broker exchange declined the sell order.'}`);
+        }
+      } catch (err) {
+        alert(`❌ Network Connection Error: ${err.message}`);
       }
     }
 
@@ -960,10 +1109,56 @@
       }
     }
 
+    function generateSparklineSvg(closes, isPositive) {
+      if (!closes || closes.length < 2) {
+        return `
+          <svg class="w-full h-9 stroke-zinc-600 fill-none" viewBox="0 0 160 36">
+            <line x1="0" y1="18" x2="160" y2="18" stroke-width="2" stroke-dasharray="4 2" />
+          </svg>
+        `;
+      }
+
+      const min = Math.min(...closes);
+      const max = Math.max(...closes);
+      const range = (max - min) === 0 ? 1 : (max - min);
+      const width = 160;
+      const height = 36;
+      const pad = 4;
+      const availH = height - (pad * 2);
+
+      const points = closes.map((val, idx) => {
+        const x = ((idx / (closes.length - 1)) * width).toFixed(1);
+        const y = ((height - pad) - ((val - min) / range) * availH).toFixed(1);
+        return `${x},${y}`;
+      });
+
+      const strokeColor = isPositive ? '#34d399' : '#f87171';
+      const fillColor = isPositive ? '#10b981' : '#ef4444';
+      const gradId = 'spk_' + Math.random().toString(36).substring(2, 9);
+      const lastPoint = points[points.length - 1].split(',');
+      const areaPoints = `${points.join(' ')} ${width},${height} 0,${height}`;
+
+      return `
+        <svg class="w-full h-9 fill-none" viewBox="0 0 ${width} ${height}">
+          <defs>
+            <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="${strokeColor}" stop-opacity="0.28"/>
+              <stop offset="100%" stop-color="${strokeColor}" stop-opacity="0.0"/>
+            </linearGradient>
+          </defs>
+          <polygon points="${areaPoints}" fill="url(#${gradId})" stroke="none" />
+          <path d="M ${points.join(' L ')}" fill="none" stroke="${strokeColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="${lastPoint[0]}" cy="${lastPoint[1]}" r="3" fill="${fillColor}" stroke="#18181b" stroke-width="1.2" />
+        </svg>
+      `;
+    }
+
     function renderHoldingsCards(positions) {
       const container = document.getElementById('holdingsContainer');
       if (!container) return;
       if (!positions || positions.length === 0) {
+        const countEl = document.getElementById('holdingsCount');
+        if (countEl) countEl.innerText = '0';
         container.innerHTML = `
           <div class="col-span-1 md:col-span-3 bg-[#18181b] border border-[#27272a] rounded-2xl p-8 text-center">
             <div class="text-3xl mb-2">💼</div>
@@ -974,53 +1169,95 @@
         return;
       }
 
+      const countEl = document.getElementById('holdingsCount');
+      if (countEl) countEl.innerText = positions.length;
+
       container.innerHTML = '';
       positions.forEach(pos => {
         const card = document.createElement('div');
-        card.className = 'bg-[#18181b] border border-[#27272a] rounded-xl p-4 relative overflow-hidden flex flex-col justify-between';
-        const costBasis = (pos.quantity * pos.average_buy_price).toFixed(2);
+        card.className = 'bg-[#18181b] border border-[#27272a] rounded-xl p-4 relative overflow-hidden flex flex-col justify-between hover:border-zinc-700 transition shadow-sm';
+        
+        const curPrice = parseFloat(pos.current_price || pos.average_buy_price || 0);
+        const avgBuy = parseFloat(pos.average_buy_price || 0);
+        const qty = parseFloat(pos.quantity || 0);
+        const costBasis = (qty * avgBuy).toFixed(2);
+        const marketVal = (pos.market_value !== undefined) ? parseFloat(pos.market_value).toFixed(2) : (qty * curPrice).toFixed(2);
+        const pnlPct = (pos.unrealized_pnl_pct !== undefined) ? parseFloat(pos.unrealized_pnl_pct) : (avgBuy > 0 ? ((curPrice - avgBuy) / avgBuy * 100) : 0);
+        const pnlUSD = (pos.unrealized_pnl_usd !== undefined) ? parseFloat(pos.unrealized_pnl_usd) : ((curPrice - avgBuy) * qty);
+        const isProfitable = pnlPct >= 0;
+
+        const closes = (pos.closes && Array.isArray(pos.closes) && pos.closes.length > 0) ? pos.closes : [avgBuy, curPrice];
+        const change7d = (pos.change_7d_pct !== undefined) ? parseFloat(pos.change_7d_pct) : (closes[0] > 0 ? ((curPrice - closes[0]) / closes[0] * 100) : 0);
+        const is7dPositive = change7d >= 0;
+
+        const min7d = Math.min(...closes).toFixed(2);
+        const max7d = Math.max(...closes).toFixed(2);
+        const sparklineSvg = generateSparklineSvg(closes, is7dPositive);
+
+        const stopFloor = pos.stop_floor ? parseFloat(pos.stop_floor).toFixed(2) : (avgBuy * 0.94).toFixed(2);
+        const ratchet = pos.ratchet_price ? parseFloat(pos.ratchet_price).toFixed(2) : (avgBuy * 1.04).toFixed(2);
+
         card.innerHTML = `
           <div>
             <div class="flex justify-between items-start mb-2">
               <div>
                 <div class="flex items-center gap-2">
-                  <span class="font-bold text-base text-white">${pos.symbol}</span>
-                  <span class="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-bold border border-emerald-500/20">ACTIVE HOLD</span>
+                  <span class="font-bold text-base text-white tracking-wide">${pos.symbol}</span>
+                  <span class="text-[10px] px-2 py-0.5 rounded font-bold border ${isProfitable ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}">
+                    ${isProfitable ? '▲ +' : '▼ '}${pnlPct.toFixed(2)}%
+                  </span>
                 </div>
-                <div class="text-[11px] text-zinc-400 font-mono">${pos.quantity} Shares • Avg $${pos.average_buy_price.toFixed(2)}</div>
+                <div class="text-[11px] text-zinc-400 font-mono mt-0.5">
+                  ${qty} shs • Avg $${avgBuy.toFixed(2)}
+                </div>
               </div>
               <div class="text-right">
-                <div class="text-sm font-bold text-white">$${costBasis}</div>
-                <div class="text-xs font-semibold text-emerald-400">Total Basis</div>
+                <div class="text-sm font-extrabold text-white font-mono">$${marketVal}</div>
+                <div class="text-[11px] font-semibold ${isProfitable ? 'text-emerald-400' : 'text-rose-400'}">
+                  ${pnlUSD >= 0 ? '+' : ''}$${pnlUSD.toFixed(2)}
+                </div>
               </div>
             </div>
 
+            <!-- 7-Day Robinhood Historical Price Action & Accurate Sparkline -->
             <div class="bg-[#09090b] rounded-lg p-2.5 my-2 border border-[#27272a]">
-              <div class="flex justify-between text-[10px] text-zinc-400 mb-1">
-                <span>Brokerage Execution</span>
-                <span class="text-emerald-400 font-bold">● Active Robinhood Asset</span>
+              <div class="flex justify-between items-center text-[10px] mb-1">
+                <span class="text-zinc-400 font-medium">Live: <strong class="text-white font-mono">$${curPrice.toFixed(2)}</strong></span>
+                <span class="font-bold ${is7dPositive ? 'text-emerald-400' : 'text-rose-400'}">
+                  7D: ${is7dPositive ? '+' : ''}${change7d.toFixed(2)}%
+                </span>
               </div>
-              <svg class="w-full h-10 stroke-emerald-400 fill-none" viewBox="0 0 160 30">
-                <path d="M0,22 L30,18 L65,22 L95,12 L130,15 L160,8" stroke-width="2.5" stroke-linecap="round"/>
-                <circle cx="160" cy="8" r="3" class="fill-emerald-400" />
-              </svg>
+              <div class="w-full my-1">
+                ${sparklineSvg}
+              </div>
+              <div class="flex justify-between text-[9px] text-zinc-500 font-mono">
+                <span>7D Low: $${min7d}</span>
+                <span>7D High: $${max7d}</span>
+              </div>
             </div>
 
-            <div class="bg-[#09090b] rounded-lg p-2 my-2 grid grid-cols-2 gap-1 text-center text-xs">
+            <!-- Risk Circuit Breaker & Ratchet -->
+            <div class="bg-[#09090b] rounded-lg p-2 my-2 grid grid-cols-2 gap-1 text-center text-xs border border-[#27272a]/60">
               <div>
-                <div class="text-[10px] text-zinc-400">Circuit Breaker</div>
-                <div class="font-bold text-emerald-400 text-xs">Protected 🛡️</div>
+                <div class="text-[9px] text-zinc-400 uppercase tracking-wider">Stop Floor (-6%)</div>
+                <div class="font-bold text-amber-400 text-[11px] font-mono">$${stopFloor}</div>
               </div>
               <div>
-                <div class="text-[10px] text-zinc-400">Ratchet Level</div>
-                <div class="font-bold text-white text-xs">+4.0% Trigger</div>
+                <div class="text-[9px] text-zinc-400 uppercase tracking-wider">Ratchet (+4%)</div>
+                <div class="font-bold text-emerald-400 text-[11px] font-mono">$${ratchet}</div>
               </div>
             </div>
           </div>
 
-          <div class="flex items-center justify-between text-[11px] text-zinc-400 border-t border-[#27272a] pt-2.5 mt-2">
-            <span>Risk Floor: <strong class="text-emerald-400">-6% Floor</strong></span>
-            <span class="text-emerald-400 font-medium">Auto-Trailing On</span>
+          <div>
+            <div class="flex items-center gap-2 pt-2 border-t border-[#27272a]">
+              <button onclick="executeConstituentBuy('${pos.symbol}', ${curPrice}, 15)" class="flex-1 py-1.5 px-2 bg-emerald-500/15 hover:bg-emerald-500 text-emerald-400 hover:text-black font-bold text-xs rounded-lg border border-emerald-500/30 transition flex items-center justify-center gap-1 cursor-pointer">
+                <span>⚡</span> Buy $15
+              </button>
+              <button onclick="executePositionSell('${pos.symbol}', ${qty})" class="py-1.5 px-3 bg-zinc-800 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-400 font-semibold text-xs rounded-lg border border-zinc-700 hover:border-rose-500/30 transition flex items-center justify-center gap-1 cursor-pointer" title="Liquidate position into cash">
+                <span>💸</span> Sell
+              </button>
+            </div>
           </div>
         `;
         container.appendChild(card);
