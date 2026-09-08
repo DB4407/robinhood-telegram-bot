@@ -384,6 +384,7 @@ async function auditHoldingsVsAlternatives({ holdings = [], universeCandidates =
 }
 
 module.exports = {
+  callPilotLLM,
   deliberateCashReinvestment,
   evaluateOpportunityDeal,
   generatePilotBriefing,
