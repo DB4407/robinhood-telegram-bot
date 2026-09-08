@@ -80,10 +80,7 @@ async function resolveAccount() {
   return RH_ACCOUNT;
 }
 
-// Security: Hard Capital Safety Limits (Circuit Breakers)
-const MAX_SINGLE_ORDER_USD = 50.00;
-const MIN_SINGLE_ORDER_USD = 1.00;
-const MAX_DAILY_DEPLOY_USD = 150.00;
+// Security: Hard Capital Safety Limits (Circuit Breakers loaded dynamically from config/trading_config.json)
 const MIN_WATCHLIST_VOLUME = 1000; // Filter out illiquid tickers with < 1,000 shares traded
 
 let dailyDeployedUSD = 0;
@@ -732,11 +729,23 @@ function getRiskConfig() {
   };
 }
 
-// Universal dynamic risk getters: ensures all handlers and commands reflect trading_config.json live without ReferenceError
+function getCircuitBreakerConfig() {
+  const cfg = loadTradingConfig();
+  return {
+    maxSingleOrderUSD: (cfg.circuit_breakers && cfg.circuit_breakers.max_single_order_usd) || 50.00,
+    minSingleOrderUSD: (cfg.circuit_breakers && cfg.circuit_breakers.min_single_order_usd) || 1.00,
+    maxDailyDeployUSD: (cfg.circuit_breakers && cfg.circuit_breakers.max_daily_deploy_usd) || 150.00
+  };
+}
+
+// Universal dynamic risk & circuit breaker getters: ensures all handlers and commands reflect trading_config.json live without restart
 Object.defineProperty(global, 'STOP_LOSS_PCT', { get: () => getRiskConfig().stopLossPct, configurable: true });
 Object.defineProperty(global, 'BREAKEVEN_RATCHET_PCT', { get: () => getRiskConfig().breakevenRatchetPct, configurable: true });
 Object.defineProperty(global, 'TAKE_PROFIT_PCT', { get: () => getRiskConfig().takeProfitPct, configurable: true });
 Object.defineProperty(global, 'TAKE_PROFIT_TRIM_PCT', { get: () => getRiskConfig().takeProfitTrimPct, configurable: true });
+Object.defineProperty(global, 'MAX_SINGLE_ORDER_USD', { get: () => getCircuitBreakerConfig().maxSingleOrderUSD, configurable: true });
+Object.defineProperty(global, 'MIN_SINGLE_ORDER_USD', { get: () => getCircuitBreakerConfig().minSingleOrderUSD, configurable: true });
+Object.defineProperty(global, 'MAX_DAILY_DEPLOY_USD', { get: () => getCircuitBreakerConfig().maxDailyDeployUSD, configurable: true });
 
 const triggeredRiskActions = new Map(); // Cooldown map (2 hours per symbol)
 const ratchetedSymbols = new Set(); // Tracks symbols whose stop loss ratcheted to breakeven

@@ -1,0 +1,7 @@
+node_modules
+.env
+*.log
+.git
+.DS_Store
+data/trades_journal.jsonl
+subscribers.json

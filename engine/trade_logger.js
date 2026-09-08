@@ -54,7 +54,7 @@ function logTradeExit(data) {
     symbol: (data.symbol || '').toUpperCase(),
     exitPrice: parseFloat(data.exitPrice || 0),
     exitReason: data.exitReason || 'MANUAL',
-    realizedPnlUSD: parseFloat(data.realizedPnlUD || 0),
+    realizedPnlUSD: parseFloat(data.realizedPnlUSD !== undefined ? data.realizedPnlUSD : (data.realizedPnlUD || 0)),
     realizedPnlPct: parseFloat(data.realizedPnlPct || 0),
     durationHours: parseFloat(data.durationHours || 0),
     features: data.features || null,
