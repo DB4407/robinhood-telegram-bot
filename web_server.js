@@ -84,6 +84,29 @@ function saveCustomTheme(scoredTheme) {
   }
 }
 
+async function getAvailableSpendableCash(rhAccount) {
+  try {
+    if (!botBridge || !botBridge.callRobinhood) return 0;
+    const p = await botBridge.callRobinhood('get_portfolio', { account_number: rhAccount });
+    const cash = (p && p.data) ? parseFloat(p.data.cash || 0) : 0;
+    const rawBP = (p && p.data && p.data.buying_power) ? parseFloat(p.data.buying_power.buying_power || 0) : 0;
+
+    const ordersRes = await botBridge.callRobinhood('get_equity_orders', { account_number: rhAccount });
+    let queuedUSD = 0;
+    if (ordersRes && ordersRes.data && ordersRes.data.orders) {
+      const queued = ordersRes.data.orders.filter(o => o.state === 'queued' && o.side === 'buy');
+      for (const qo of queued) {
+        const amt = qo.dollar_based_amount ? parseFloat(qo.dollar_based_amount.amount) : (parseFloat(qo.quantity) * (parseFloat(qo.price) || 0));
+        queuedUSD += amt;
+      }
+    }
+    return Math.max(0, Math.min(rawBP, cash - queuedUSD));
+  } catch (err) {
+    console.warn('[SPENDABLE CASH] Error calculating buying power:', err.message);
+    return 0;
+  }
+}
+
 // Cached Radar Telemetry
 let cachedRadar = null;
 let radarCacheTime = 0;
@@ -421,12 +444,32 @@ async function handleWebRequest(req, res) {
         }
 
         const rhAccount = botBridge.getRHAccount();
+        const spendableCash = await getAvailableSpendableCash(rhAccount);
+
+        if (spendableCash < 1.00) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({
+            success: false,
+            error: `Insufficient spendable buying power ($${spendableCash.toFixed(2)}). Robinhood requires a minimum order size of $1.00. Please liquidate an active holding to fund this purchase.`
+          }));
+        }
+
+        // Leave buffer ($0.08) to prevent broker price-collar rejection
+        const maxSpendable = Math.max(1.00, Math.floor((spendableCash - 0.08) * 100) / 100);
+        let finalAmountUSD = amountUSD;
+        let autoAdjusted = false;
+
+        if (finalAmountUSD > maxSpendable) {
+          finalAmountUSD = maxSpendable;
+          autoAdjusted = true;
+        }
+
         const orderRes = await botBridge.callRobinhood('place_equity_order', {
           account_number: rhAccount,
           symbol: symbol,
           side: 'buy',
           type: 'market',
-          dollar_amount: amountUSD.toFixed(2),
+          dollar_amount: finalAmountUSD.toFixed(2),
           time_in_force: 'gfd',
           market_hours: 'regular_hours'
         });
@@ -441,7 +484,7 @@ async function handleWebRequest(req, res) {
         tradeLogger.logTradeEntry({
           symbol: symbol,
           side: 'buy',
-          amountUSD: amountUSD,
+          amountUSD: finalAmountUSD,
           price: parseFloat(ord.price || 0),
           shares: parseFloat(ord.quantity || 0)
         });
@@ -450,7 +493,8 @@ async function handleWebRequest(req, res) {
         return res.end(JSON.stringify({
           success: true,
           order: ord,
-          message: `🚀 Market Order Dispatched for $${amountUSD.toFixed(2)} of ${symbol}! (State: ${ord.state})`
+          amountUSD: finalAmountUSD,
+          message: `🚀 Market Order Dispatched for $${finalAmountUSD.toFixed(2)} of ${symbol}!${autoAdjusted ? ` (Auto-sized to match available cash of $${spendableCash.toFixed(2)})` : ''} (State: ${ord.state})`
         }));
       } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -555,20 +599,44 @@ async function handleWebRequest(req, res) {
               time_in_force: 'gfd',
               market_hours: 'regular_hours'
             });
-            if (sellRes.data) {
+            if (sellRes && sellRes.data) {
               soldDetail = { symbol: liquidateSymbol, quantity: sellQty, state: sellRes.data.state };
               tradeLogger.logTradeExit(liquidateSymbol, parseFloat(sellRes.data.price || matchPos.average_buy_price), 'THEMATIC_REBALANCE');
+              // Allow broker ledger settlement
+              await new Promise(r => setTimeout(r, 1500));
             }
           }
         }
 
-        // Step 2: Accumulate target ETF constituent
+        // Step 2: Validate available spendable cash post-liquidation
+        const spendableCash = await getAvailableSpendableCash(rhAccount);
+
+        if (spendableCash < 1.00) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({
+            success: false,
+            sold: soldDetail,
+            error: `Cannot accumulate ${targetSymbol}: insufficient spendable buying power ($${spendableCash.toFixed(2)}). Robinhood requires a minimum order size of $1.00.${liquidateSymbol && !soldDetail ? ` (Note: ${liquidateSymbol} was not held to liquidate)` : ''}`
+          }));
+        }
+
+        // Auto-size accumulation amount to fit available buying power
+        const maxSpendable = Math.max(1.00, Math.floor((spendableCash - 0.08) * 100) / 100);
+        let finalAmountUSD = amountUSD;
+        let autoAdjusted = false;
+
+        if (finalAmountUSD > maxSpendable) {
+          finalAmountUSD = maxSpendable;
+          autoAdjusted = true;
+        }
+
+        // Step 3: Accumulate target ETF constituent
         const buyRes = await botBridge.callRobinhood('place_equity_order', {
           account_number: rhAccount,
           symbol: targetSymbol,
           side: 'buy',
           type: 'market',
-          dollar_amount: amountUSD.toFixed(2),
+          dollar_amount: finalAmountUSD.toFixed(2),
           time_in_force: 'gfd',
           market_hours: 'regular_hours'
         });
@@ -583,7 +651,7 @@ async function handleWebRequest(req, res) {
         tradeLogger.logTradeEntry({
           symbol: targetSymbol,
           side: 'buy',
-          amountUSD: amountUSD,
+          amountUSD: finalAmountUSD,
           price: parseFloat(ord.price || 0),
           shares: parseFloat(ord.quantity || 0)
         });
@@ -592,8 +660,8 @@ async function handleWebRequest(req, res) {
         return res.end(JSON.stringify({
           success: true,
           sold: soldDetail,
-          bought: { symbol: targetSymbol, amountUSD: amountUSD, state: ord.state },
-          message: `✅ Tactical Rebalance Dispatched! ${soldDetail ? `Liquidated ${soldDetail.quantity} shares of ${soldDetail.symbol} and ` : ''}accumulated $${amountUSD.toFixed(2)} of top-pick ${targetSymbol}.`
+          bought: { symbol: targetSymbol, amountUSD: finalAmountUSD, state: ord.state },
+          message: `✅ Tactical Rebalance Dispatched! ${soldDetail ? `Liquidated ${soldDetail.quantity} sh of ${soldDetail.symbol} and ` : ''}accumulated $${finalAmountUSD.toFixed(2)} of top-pick ${targetSymbol}${autoAdjusted ? ` (Auto-sized to fit $${spendableCash.toFixed(2)} available cash)` : ''}.`
         }));
       } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -701,11 +769,11 @@ async function handleWebRequest(req, res) {
       if (botBridge && botBridge.callRobinhood) {
         try {
           const rhAccount = botBridge.getRHAccount();
+          spendableCash = await getAvailableSpendableCash(rhAccount);
           const p = await botBridge.callRobinhood('get_portfolio', { account_number: rhAccount });
           const pos = await botBridge.callRobinhood('get_equity_positions', { account_number: rhAccount });
           if (p && p.data) {
             totalEquity = parseFloat(p.data.total_value || totalEquity);
-            spendableCash = parseFloat(p.data.cash || spendableCash);
           }
           if (pos && pos.data && pos.data.positions) {
             activeHoldings = pos.data.positions.filter(x => parseFloat(x.quantity) > 0).map(x => ({
@@ -720,8 +788,11 @@ async function handleWebRequest(req, res) {
       // Generate dynamic Restructuring Directives
       const directives = [];
 
-      // 1. Check for out-of-theme / stagnant holdings (e.g. WMT)
-      const stagnantHolding = activeHoldings.find(h => h.symbol === 'WMT');
+      // 1. Check for out-of-theme / stagnant holdings (e.g. WMT, TYRA)
+      let stagnantHolding = activeHoldings.find(h => h.symbol === 'WMT');
+      if (!stagnantHolding) {
+        stagnantHolding = activeHoldings.find(h => h.symbol === 'TYRA') || null;
+      }
       const topBreakout = radarCandidates.find(c => c.probabilityPct >= 70 && !activeHoldings.some(h => h.symbol === c.symbol)) || radarCandidates[0];
 
       if (stagnantHolding && topBreakout) {
@@ -733,7 +804,7 @@ async function handleWebRequest(req, res) {
           fromSymbol: stagnantHolding.symbol,
           toSymbol: topBreakout.symbol,
           amountUSD: 15.00,
-          rationale: `${stagnantHolding.symbol} is idling in a low-momentum channel (RSI 36.3, low breakout probability). Capital has significantly higher velocity in ${topBreakout.symbol} (${topBreakout.name} - ${topBreakout.sector}) with ${topBreakout.probabilityPct}% breakout probability and institutional coiling.`,
+          rationale: `${stagnantHolding.symbol} is idling in a low-momentum channel. Capital has significantly higher velocity in ${topBreakout.symbol} (${topBreakout.name} - ${topBreakout.sector}) with ${topBreakout.probabilityPct}% breakout probability and institutional coiling.`,
           ruleApplied: 'Learned Rule: Prune low-volatility consumer assets; channel 100% of risk capital into sovereign AI physical supply-chain bottlenecks.',
           actionButton: `⚡ Execute Swap: Sell ${stagnantHolding.symbol} ➔ Buy ${topBreakout.symbol}`
         });
@@ -754,9 +825,9 @@ async function handleWebRequest(req, res) {
         });
       }
 
-      // 3. Cash Deployment Directive
-      if (spendableCash >= 5.00 && topBreakout) {
-        const deployAmt = Math.min(15.00, Math.floor(spendableCash));
+      // 3. Cash Deployment Directive (Auto-sized to true spendable cash)
+      if (spendableCash >= 1.00 && topBreakout) {
+        const deployAmt = Math.min(15.00, Math.max(1.00, Math.floor((spendableCash - 0.08) * 100) / 100));
         directives.push({
           id: 'DIR_CASH_DEPLOY',
           type: 'CASH_DEPLOYMENT',

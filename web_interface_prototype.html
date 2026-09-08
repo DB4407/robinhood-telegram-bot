@@ -551,7 +551,7 @@
         fullName: '🔋 Clean Nuclear Baseload & AI Energy Supergrid',
         thesis: 'Hyperscale AI data centers require 24/7 carbon-free baseload power. Nuclear utilities, uranium producers, and grid transformers capture multi-decade off-take power purchase agreements.',
         tickers: [
-          { symbol: 'SU', name: 'Schneider Electric', subsector: 'Substations & Energy Automation', price: 68.08, rsi: 51.6, prob: 91.2, badge: '🚀 READY: COILING BREAKOUT', score: 90, note: 'Volatility squeeze coiling with strong volume anomaly.' },
+          { symbol: 'ETN', name: 'Eaton Corp', subsector: 'AI Power & Grid Transformers', price: 345.20, rsi: 52.4, prob: 88.5, badge: '🚀 READY: COILING BREAKOUT', score: 90, note: 'Monopoly supplier of data center transformers and power management.' },
           { symbol: 'CCJ', name: 'Cameco Corp', subsector: 'Uranium Mining & Fuel', price: 103.64, rsi: 60.8, prob: 94.2, badge: '🟢 HIGH CONVICTION BUY', score: 85, note: 'Uranium structural deficit driving multi-year contract price spikes.' },
           { symbol: 'CEG', name: 'Constellation Energy', subsector: 'Nuclear Baseload Operator', price: 301.21, rsi: 77.6, badge: '⚠️ OVERBOUGHT (RSI > 70)', prob: 97.7, score: 35, note: 'Journal Warning: RSI 77.6 is elevated. Wait for mean reversion dip.' },
           { symbol: 'VST', name: 'Vistra Corp', subsector: 'Integrated Nuclear Fleet', price: 153.76, rsi: 69.9, prob: 94.9, badge: '⚖️ EXTENDED / WATCH', score: 55, note: 'RSI near 70 ceiling. High probability but tight risk entry.' },
@@ -697,7 +697,7 @@
           </td>
           <td class="p-3 text-right whitespace-nowrap">
             <button onclick="executeConstituentBuy('${t.symbol}', ${price !== '--' ? price : 50})" class="px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs transition cursor-pointer">
-              Buy $15
+              Buy
             </button>
           </td>
         `;
@@ -828,25 +828,42 @@
       }
     }
 
-    async function executeConstituentBuy(symbol, price, amountUSD = 15.00) {
+    async function executeConstituentBuy(symbol, price, amountUSD = null) {
       const token = getAuthToken();
       if (!token) {
         alert('Please unlock your operator session first before placing orders.');
         return;
       }
 
+      const spendableCash = (window.lastSyncedSpendableCash !== undefined) ? window.lastSyncedSpendableCash : 7.26;
+      if (spendableCash < 1.00) {
+        alert(`❌ Insufficient Spendable Cash ($${spendableCash.toFixed(2)}).\n\nRobinhood requires a minimum order size of $1.00. Please liquidate an active holding to fund new purchases.`);
+        return;
+      }
+
+      const defaultAmt = Math.min(15.00, Math.max(1.00, Math.floor((spendableCash - 0.08) * 100) / 100));
       const cleanPrice = (price && price !== '--' && !isNaN(price)) ? Number(price).toFixed(2) : 'Market';
-      const cleanAmt = parseFloat(amountUSD || 15);
-      const confirmed = confirm(
+
+      const promptInput = prompt(
         `🚀 DISPATCH LIVE MARKET BUY ORDER\n\n` +
         `• Ticker: ${symbol}\n` +
-        `• Allocation: $${cleanAmt.toFixed(2)} USD\n` +
-        `• Reference Price: $${cleanPrice}\n` +
-        `• Safety Circuit: -6% stop-loss floor active\n` +
-        `• Ratchet: +4% breakeven trigger\n\n` +
-        `Transmit this live order directly to your Robinhood account?`
+        `• Live Reference Price: $${cleanPrice}\n` +
+        `• Spendable Cash Available: $${spendableCash.toFixed(2)}\n` +
+        `• Risk Controls: -6% Stop Loss Floor & +4% Breakeven Ratchet\n\n` +
+        `Enter USD dollar allocation (min $1.00):`,
+        (amountUSD && amountUSD <= spendableCash) ? Number(amountUSD).toFixed(2) : defaultAmt.toFixed(2)
       );
-      if (!confirmed) return;
+
+      if (!promptInput) return;
+      const cleanAmt = parseFloat(promptInput);
+      if (isNaN(cleanAmt) || cleanAmt < 1.00) {
+        alert('Invalid order amount. Minimum order is $1.00.');
+        return;
+      }
+      if (cleanAmt > spendableCash) {
+        alert(`Order amount ($${cleanAmt.toFixed(2)}) exceeds available spendable cash ($${spendableCash.toFixed(2)}).`);
+        return;
+      }
 
       showNotificationToast(`⏳ Transmitting $${cleanAmt.toFixed(2)} market buy for ${symbol} to Robinhood...`, 6000);
 
@@ -886,11 +903,27 @@
       }
 
       const topPick = theme.tickers.find(t => (t.score || t.readinessScore || 0) >= 80) || theme.tickers[0];
+      const spendableCash = (window.lastSyncedSpendableCash !== undefined) ? window.lastSyncedSpendableCash : 7.26;
+      
+      const positions = window.livePositions || [];
+      const stagnantPos = positions.find(p => p.symbol === 'WMT' || p.symbol === 'TYRA' || p.unrealized_pnl_pct < -2);
+      const liquidateSym = stagnantPos ? stagnantPos.symbol : '';
+
+      const targetAllocation = spendableCash >= 1.00 
+        ? Math.min(15.00, Math.max(1.00, Math.floor((spendableCash - 0.08) * 100) / 100))
+        : 15.00;
+
+      if (spendableCash < 1.00 && !liquidateSym) {
+        alert(`❌ Cannot rebalance: Spendable cash is $${spendableCash.toFixed(2)} and no stagnant positions were found to rotate from. Please sell an active holding to free up capital.`);
+        return;
+      }
+
       const confirmed = confirm(
         `⚡ CONFIRM TACTICAL BASKET REBALANCE\n\n` +
         `• ETF Horizon: [${theme.etfTicker}] ${theme.fullName}\n` +
-        `• Target Accumulation: $15.00 of top-rated ${topPick.symbol} (~$${Number(topPick.price || 0).toFixed(2)})\n` +
-        `• Rotation Trigger: Liquidates non-thematic retail holdings (e.g. WMT if held)\n` +
+        `• Target Accumulation: $${targetAllocation.toFixed(2)} of top-rated ${topPick.symbol} (~$${Number(topPick.price || 0).toFixed(2)})\n` +
+        `• Available Cash: $${spendableCash.toFixed(2)}\n` +
+        (liquidateSym ? `• Rotation Trigger: Liquidates non-conforming holding ${liquidateSym} first\n` : `• Capital Source: Deploys available liquidity directly\n`) +
         `• Risk Protection: Auto-trailing ratchets applied\n\n` +
         `Execute this rebalance order sequence on Robinhood now?`
       );
@@ -908,8 +941,8 @@
           body: JSON.stringify({
             themeTicker: theme.etfTicker,
             targetSymbol: topPick.symbol,
-            amountUSD: 15.00,
-            liquidateSymbol: 'WMT'
+            amountUSD: targetAllocation,
+            liquidateSymbol: liquidateSym
           })
         });
 
@@ -1055,8 +1088,8 @@
           <td class="p-3">${squeezeBadge}</td>
           <td class="p-3 text-zinc-300 font-mono">${c.volumeSpike || '1.0x'}</td>
           <td class="p-3 text-right">
-            <button onclick="executeConstituentBuy('${c.symbol}', ${c.price}, 15)" class="px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs transition cursor-pointer">
-              Buy $15
+            <button onclick="executeConstituentBuy('${c.symbol}', ${c.price})" class="px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs transition cursor-pointer">
+              Buy
             </button>
           </td>
         `;
@@ -1077,8 +1110,8 @@
 
         return `
           <div class="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-[#09090b] border border-[#27272a] hover:border-emerald-500/40 transition cursor-pointer shrink-0" 
-               title="Click to place $15 live market order on ${c.symbol}"
-               onclick="setTab('radar'); executeConstituentBuy('${c.symbol}', ${c.price}, 15)">
+               title="Click to allocate live market order on ${c.symbol}"
+               onclick="setTab('radar'); executeConstituentBuy('${c.symbol}', ${c.price})">
             <span class="font-extrabold text-white text-xs tracking-wider">${c.symbol}</span>
             <span class="text-zinc-300 font-mono text-xs">$${priceStr}</span>
             <span class="text-[11px] font-bold ${isUp ? 'text-emerald-400' : 'text-rose-400'}">
@@ -1593,6 +1626,10 @@
 
         const d = await res.json();
         if (d.connected) {
+          window.liveBrokerageState = d;
+          window.lastSyncedSpendableCash = (d.spendableCash !== undefined) ? d.spendableCash : 0;
+          window.livePositions = d.positions || [];
+
           if (d.totalEquity !== undefined) {
             document.getElementById('valTotal').innerText = '$' + d.totalEquity.toFixed(2);
           }
