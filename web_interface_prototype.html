@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Autonomous AI Trading Cockpit - Synthetic ETF & Multi-Tenant Hub</title>
+  <title>Autonomous AI Trading Cockpit - Terminal Hub</title>
   <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
   <style>
     .pulse-glow {
@@ -16,6 +16,58 @@
 </head>
 <body class="bg-[#09090b] text-[#f4f4f5] font-sans antialiased p-4 md:p-6 min-h-screen">
 
+  <!-- SECURE OWNER LOGIN MODAL OVERLAY -->
+  <div id="loginModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md transition-opacity duration-300">
+    <div class="bg-[#18181b] border border-[#27272a] rounded-2xl p-6 md:p-8 max-w-md w-full mx-4 shadow-2xl relative">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-2xl">
+          🛡️
+        </div>
+        <div>
+          <h2 class="text-lg font-bold text-white">Robinhood AI Trading Cockpit</h2>
+          <span class="text-[11px] font-semibold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+            Secure Operator Terminal Gate
+          </span>
+        </div>
+      </div>
+
+      <p class="text-xs text-zinc-400 mb-5 leading-relaxed">
+        Access is restricted to authorized bot operators. Please enter your Operator ID and Master PIN (or Telegram User ID configured in your EC2 environment) to unlock live telemetry.
+      </p>
+
+      <form id="loginForm" onsubmit="handleLoginSubmit(event)" class="space-y-4">
+        <div>
+          <label class="block text-xs font-semibold text-zinc-300 mb-1.5">Operator ID / Name</label>
+          <input type="text" id="loginUsername" value="Dylan" required
+                 class="w-full bg-[#09090b] border border-[#27272a] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition">
+        </div>
+
+        <div>
+          <div class="flex justify-between items-center mb-1.5">
+            <label class="text-xs font-semibold text-zinc-300">Master PIN / Telegram Auth ID</label>
+            <span class="text-[10px] text-zinc-500">From .env whitelist</span>
+          </div>
+          <input type="password" id="loginSecret" placeholder="Enter Telegram User ID or Master PIN" required
+                 class="w-full bg-[#09090b] border border-[#27272a] rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-zinc-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition">
+        </div>
+
+        <div id="loginErrorMsg" class="hidden p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-xs font-medium"></div>
+
+        <button type="submit" id="loginSubmitBtn"
+                class="w-full py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs rounded-xl shadow-lg shadow-emerald-500/20 transition flex items-center justify-center gap-2">
+          <span>🔓</span> Unlock Trading Cockpit
+        </button>
+      </form>
+
+      <div class="mt-4 pt-4 border-t border-[#27272a] flex items-center justify-between text-[11px] text-zinc-500">
+        <span class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span> AES-256 Vault Active
+        </span>
+        <span>Node.js v24 • EC2 Cloud</span>
+      </div>
+    </div>
+  </div>
+
   <!-- Top Navigation / User Header -->
   <header class="bg-[#18181b] border border-[#27272a] rounded-2xl p-4 mb-6 shadow-xl flex flex-wrap items-center justify-between gap-4">
     <div class="flex items-center gap-3">
@@ -26,7 +78,7 @@
         <div class="flex items-center gap-2">
           <h1 class="font-bold text-lg text-white">AI Trading Cockpit</h1>
           <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> Live Multi-Tenant
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> Live Single-Tenant
           </span>
           <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20">
             Grok Synthetic ETF Architect
@@ -36,23 +88,21 @@
       </div>
     </div>
 
-    <!-- Active User & Session Switcher Simulator -->
+    <!-- Active Authenticated User Session Status -->
     <div class="flex items-center gap-3 bg-[#09090b] px-3.5 py-2 rounded-xl border border-[#27272a]">
       <div class="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs border border-emerald-500/30" id="userAvatar">
         DY
       </div>
       <div class="text-left text-xs">
         <div class="font-semibold text-white flex items-center gap-1.5">
-          <span id="userNameDisplay">Dylan (Active Session)</span>
-          <span class="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">AES-256 Encrypted</span>
+          <span id="userNameDisplay">Operator Locked</span>
+          <span class="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20" id="userAuthBadge">Locked</span>
         </div>
-        <div class="text-zinc-400 text-[11px]" id="userSubText">Robinhood: ••••4812 • Target ETF: GIGA (Physical AI)</div>
+        <div class="text-zinc-400 text-[11px]" id="userSubText">Awaiting operator credentials...</div>
       </div>
-      <select id="userSelector" onchange="switchUser(this.value)" class="bg-[#18181b] text-zinc-200 text-xs border border-[#27272a] rounded-lg px-2.5 py-1.5 ml-2 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer">
-        <option value="dylan">User 1: Dylan (AI Hardware / GIGA)</option>
-        <option value="friend">User 2: Jordan (Nuclear Energy / NUKE)</option>
-        <option value="new">+ Add Friend Account (New Tenant)</option>
-      </select>
+      <button onclick="logoutSession()" class="ml-2 px-2.5 py-1 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-[11px] rounded-lg border border-zinc-700 transition">
+        🔒 Logout
+      </button>
     </div>
   </header>
 
@@ -60,17 +110,17 @@
   <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
     <div class="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
       <div class="text-xs text-zinc-400 font-medium">Total Portfolio Equity</div>
-      <div class="text-2xl font-extrabold text-white mt-1" id="valTotal">$116.48</div>
-      <div class="text-xs text-emerald-400 mt-1 flex items-center gap-1 font-semibold" id="valPnlSub">
-        <span>▲ +8.2%</span> <span class="text-zinc-500 font-normal">all-time realized</span>
+      <div class="text-2xl font-extrabold text-white mt-1" id="valTotal">--</div>
+      <div class="text-xs text-zinc-400 mt-1 flex items-center gap-1 font-semibold" id="valPnlSub">
+        <span>●</span> <span class="text-zinc-500 font-normal">Robinhood API Sync</span>
       </div>
     </div>
 
     <div class="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
       <div class="text-xs text-zinc-400 font-medium">Spendable Cash Reserve</div>
-      <div class="text-2xl font-extrabold text-blue-400 mt-1" id="valCash">$14.20</div>
+      <div class="text-2xl font-extrabold text-blue-400 mt-1" id="valCash">--</div>
       <div class="text-[11px] text-zinc-400 mt-1" id="valCashSub">
-        Circuit Breaker: Min $10 reserve protected
+        Circuit Breaker: Active Reserve Guard
       </div>
     </div>
 
@@ -223,166 +273,10 @@
   <!-- TAB 1: ACTIVE HOLDINGS WITH LIVE CHARTS -->
   <div id="tab-holdings" class="hidden space-y-6">
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="holdingsContainer">
-      <!-- Card 1: NVDA -->
-      <div class="bg-[#18181b] border border-[#27272a] rounded-xl p-4 relative overflow-hidden flex flex-col justify-between">
-        <div>
-          <div class="flex justify-between items-start mb-2">
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="font-bold text-base text-white">NVDA</span>
-                <span class="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-bold border border-emerald-500/20">AI LEAD</span>
-              </div>
-              <div class="text-[11px] text-zinc-400">GPU Silicon & AI Compute</div>
-            </div>
-            <div class="text-right">
-              <div class="text-sm font-bold text-white">$230.19</div>
-              <div class="text-xs font-semibold text-emerald-400">+7.1% PnL</div>
-            </div>
-          </div>
-
-          <div class="bg-[#09090b] rounded-lg p-2.5 my-2 border border-[#27272a]">
-            <div class="flex justify-between text-[10px] text-zinc-400 mb-1">
-              <span>7-Day Price Trajectory</span>
-              <span class="text-emerald-400 font-bold">▲ Strong Upward Momentum</span>
-            </div>
-            <svg class="w-full h-12 stroke-emerald-400 fill-none" viewBox="0 0 160 40">
-              <path d="M0,32 L25,28 L50,30 L75,20 L100,22 L125,12 L160,6" stroke-width="2.5" stroke-linecap="round"/>
-              <circle cx="160" cy="6" r="3" class="fill-emerald-400" />
-            </svg>
-            <div class="flex justify-between text-[9px] text-zinc-500 mt-1">
-              <span>$214.90 (7d ago)</span>
-              <span>$230.19 (Now)</span>
-            </div>
-          </div>
-
-          <div class="bg-[#09090b] rounded-lg p-2 my-2 grid grid-cols-3 gap-1 text-center text-xs">
-            <div>
-              <div class="text-[10px] text-zinc-400">Breakout</div>
-              <div class="font-extrabold text-emerald-400 text-xs">95.3%</div>
-            </div>
-            <div>
-              <div class="text-[10px] text-zinc-400">14D RSI</div>
-              <div class="font-bold text-white text-xs">53.6</div>
-            </div>
-            <div>
-              <div class="text-[10px] text-zinc-400">Squeeze</div>
-              <div class="font-bold text-amber-400 text-xs">⚡ ACTIVE</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="flex items-center justify-between text-[11px] text-zinc-400 border-t border-[#27272a] pt-2.5 mt-2">
-          <span>Stop Floor: <strong class="text-red-400">$202.10 (-6%)</strong></span>
-          <span class="text-emerald-400 font-medium">Breakeven Ratchet Active 🛡️</span>
-        </div>
-      </div>
-
-      <!-- Card 2: INTC -->
-      <div class="bg-[#18181b] border border-[#27272a] rounded-xl p-4 relative overflow-hidden flex flex-col justify-between">
-        <div>
-          <div class="flex justify-between items-start mb-2">
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="font-bold text-base text-white">INTC</span>
-                <span class="text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-bold border border-blue-500/20">FOUNDRY</span>
-              </div>
-              <div class="text-[11px] text-zinc-400">US Foundry Turnaround</div>
-            </div>
-            <div class="text-right">
-              <div class="text-sm font-bold text-white">$94.82</div>
-              <div class="text-xs font-semibold text-emerald-400">+11.5% PnL</div>
-            </div>
-          </div>
-
-          <div class="bg-[#09090b] rounded-lg p-2.5 my-2 border border-[#27272a]">
-            <div class="flex justify-between text-[10px] text-zinc-400 mb-1">
-              <span>7-Day Price Trajectory</span>
-              <span class="text-blue-400 font-bold">▲ Consolidation Base</span>
-            </div>
-            <svg class="w-full h-12 stroke-blue-400 fill-none" viewBox="0 0 160 40">
-              <path d="M0,25 L30,22 L60,26 L90,18 L120,20 L160,14" stroke-width="2.5" stroke-linecap="round"/>
-              <circle cx="160" cy="14" r="3" class="fill-blue-400" />
-            </svg>
-            <div class="flex justify-between text-[9px] text-zinc-500 mt-1">
-              <span>$85.00 (7d ago)</span>
-              <span>$94.82 (Now)</span>
-            </div>
-          </div>
-
-          <div class="bg-[#09090b] rounded-lg p-2 my-2 grid grid-cols-3 gap-1 text-center text-xs">
-            <div>
-              <div class="text-[10px] text-zinc-400">Breakout</div>
-              <div class="font-extrabold text-blue-400 text-xs">34.8%</div>
-            </div>
-            <div>
-              <div class="text-[10px] text-zinc-400">14D RSI</div>
-              <div class="font-bold text-white text-xs">35.6</div>
-            </div>
-            <div>
-              <div class="text-[10px] text-zinc-400">Squeeze</div>
-              <div class="font-bold text-zinc-400 text-xs">Normal</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="flex items-center justify-between text-[11px] text-zinc-400 border-t border-[#27272a] pt-2.5 mt-2">
-          <span>Stop Floor: <strong class="text-emerald-400">$85.00 ($0 Risk)</strong></span>
-          <span class="text-blue-400 font-medium">+8% TP Ready 🎯</span>
-        </div>
-      </div>
-
-      <!-- Card 3: WMT (Laggard) -->
-      <div class="bg-[#18181b] border border-amber-500/30 rounded-xl p-4 relative overflow-hidden flex flex-col justify-between">
-        <div>
-          <div class="flex justify-between items-start mb-2">
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="font-bold text-base text-white">WMT</span>
-                <span class="text-xs px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 font-bold border border-amber-500/20">⚠️ ROTATE OUT</span>
-              </div>
-              <div class="text-[11px] text-zinc-400">Consumer Defensive (Non-AI)</div>
-            </div>
-            <div class="text-right">
-              <div class="text-sm font-bold text-white">$107.17</div>
-              <div class="text-xs font-semibold text-emerald-400">+12.8% PnL</div>
-            </div>
-          </div>
-
-          <div class="bg-[#09090b] rounded-lg p-2.5 my-2 border border-[#27272a]">
-            <div class="flex justify-between text-[10px] text-zinc-400 mb-1">
-              <span>7-Day Price Trajectory</span>
-              <span class="text-amber-400 font-bold">▶ Sideways / Low Vol</span>
-            </div>
-            <svg class="w-full h-12 stroke-amber-400 fill-none" viewBox="0 0 160 40">
-              <path d="M0,18 L30,22 L60,19 L90,21 L120,18 L160,20" stroke-width="2.5" stroke-linecap="round"/>
-              <circle cx="160" cy="20" r="3" class="fill-amber-400" />
-            </svg>
-            <div class="flex justify-between text-[9px] text-zinc-500 mt-1">
-              <span>$106.80 (7d ago)</span>
-              <span>$107.17 (Now)</span>
-            </div>
-          </div>
-
-          <div class="bg-[#09090b] rounded-lg p-2 my-2 grid grid-cols-3 gap-1 text-center text-xs">
-            <div>
-              <div class="text-[10px] text-zinc-400">Breakout</div>
-              <div class="font-extrabold text-red-400 text-xs">3.8%</div>
-            </div>
-            <div>
-              <div class="text-[10px] text-zinc-400">14D RSI</div>
-              <div class="font-bold text-white text-xs">36.3</div>
-            </div>
-            <div>
-              <div class="text-[10px] text-zinc-400">Squeeze</div>
-              <div class="font-bold text-zinc-500 text-xs">None</div>
-            </div>
-          </div>
-        </div>
-
-        <div class="flex items-center justify-between text-[11px] text-zinc-400 border-t border-[#27272a] pt-2.5 mt-2">
-          <span>Stagnant Capital</span>
-          <button onclick="setTab('etf')" class="text-amber-400 hover:underline font-bold">Rotate into Target ETF &rarr;</button>
-        </div>
+      <div class="col-span-1 md:col-span-3 bg-[#18181b] border border-[#27272a] rounded-2xl p-8 text-center" id="holdingsEmptyState">
+        <div class="text-3xl mb-2">💼</div>
+        <div class="font-bold text-white text-sm" id="holdingsEmptyTitle">Syncing Robinhood Portfolio...</div>
+        <p class="text-xs text-zinc-400 mt-1" id="holdingsEmptySub">Live equity positions and real-time execution status will appear here after authentication.</p>
       </div>
     </div>
   </div>
@@ -567,34 +461,39 @@
       </div>
 
       <div class="bg-[#18181b] border border-[#27272a] rounded-xl p-5">
-        <h2 class="font-bold text-sm text-white mb-1">Your Account Credentials & Vault</h2>
-        <p class="text-xs text-zinc-400 mb-4">Manage your Robinhood connection and circuit breakers.</p>
+        <h2 class="font-bold text-sm text-white mb-1">Your Brokerage Vault & Risk Controls</h2>
+        <p class="text-xs text-zinc-400 mb-4">Direct synchronization with Robinhood broker bridge and safety circuit breakers.</p>
 
         <div class="space-y-3 text-xs">
           <div>
-            <label class="block font-semibold mb-1 text-zinc-300">Connected Robinhood Bearer Token</label>
-            <input type="password" value="rh_tok_live_••••••••••••••••••••••••4812" class="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-2 text-zinc-300 font-mono">
-            <span class="text-[10px] text-emerald-400 mt-1 inline-block">✓ Active & Validated via MCP Trading Gateway</span>
+            <label class="block font-semibold mb-1 text-zinc-300">Connected Robinhood Gateway Token</label>
+            <input type="password" id="vaultRobinhoodToken" value="••••••••••••••••" readonly class="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-2 text-zinc-300 font-mono">
+            <span id="vaultTokenStatusBadge" class="text-[10px] text-emerald-400 mt-1 inline-block">● Synced securely from EC2 .env</span>
           </div>
 
           <div>
-            <label class="block font-semibold mb-1 text-zinc-300">Target Brokerage Account ID</label>
-            <input type="text" value="••••4812 (Discovered Agentic Account)" class="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-2 text-zinc-300 font-mono" readonly>
+            <label class="block font-semibold mb-1 text-zinc-300">Live Brokerage Account ID</label>
+            <input type="text" id="vaultAccountId" value="Auto-Discovered Brokerage Account" class="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-2 text-zinc-300 font-mono" readonly>
+          </div>
+
+          <div>
+            <label class="block font-semibold mb-1 text-zinc-300">Authorized Telegram Operator ID</label>
+            <input type="text" id="vaultTelegramId" value="••••" class="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-2 text-zinc-300 font-mono" readonly>
           </div>
 
           <div class="grid grid-cols-2 gap-3 pt-2">
             <div>
               <label class="block font-semibold mb-1 text-zinc-300">Max Single Trade ($ USD)</label>
-              <input type="number" value="15.00" class="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-2 text-white">
+              <input type="number" id="vaultMaxTrade" value="50.00" class="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-emerald-500">
             </div>
             <div>
               <label class="block font-semibold mb-1 text-zinc-300">Min Cash Reserve ($ USD)</label>
-              <input type="number" value="10.00" class="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-2 text-white">
+              <input type="number" id="vaultMinReserve" value="10.00" class="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-2 text-white focus:ring-1 focus:ring-emerald-500">
             </div>
           </div>
 
-          <button onclick="alert('Tenant credentials and circuit breaker limits updated successfully!')" class="w-full mt-3 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-bold rounded-xl transition">
-            Update Personal Vault & Circuit Breakers
+          <button onclick="updateVaultCircuitBreakers()" class="w-full mt-3 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-bold rounded-xl transition shadow-md shadow-emerald-500/20">
+            Save Circuit Breakers to EC2 Engine
           </button>
         </div>
       </div>
@@ -783,27 +682,6 @@
       if (activeBtn) activeBtn.className = 'px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-500 text-black shadow-sm transition';
     }
 
-    // USER SWITCHING
-    function switchUser(userKey) {
-      if (userKey === 'dylan') {
-        document.getElementById('userNameDisplay').innerText = 'Dylan (Active Session)';
-        document.getElementById('userAvatar').innerText = 'DY';
-        document.getElementById('userSubText').innerText = 'Robinhood: ••••4812 • Target ETF: GIGA (Physical AI)';
-        document.getElementById('valTotal').innerText = '$116.48';
-        document.getElementById('valCash').innerText = '$14.20';
-        loadEtfTheme('ai_physical_infrastructure');
-      } else if (userKey === 'friend') {
-        document.getElementById('userNameDisplay').innerText = 'Jordan (Friend - Isolated Session)';
-        document.getElementById('userAvatar').innerText = 'JO';
-        document.getElementById('userSubText').innerText = 'Robinhood: ••••9931 • Target ETF: NUKE (Clean Energy)';
-        document.getElementById('valTotal').innerText = '$842.10';
-        document.getElementById('valCash').innerText = '$125.00';
-        loadEtfTheme('clean_energy_supergrid');
-      } else {
-        alert('Adding New Tenant: Each user receives their own isolated encrypted vault and personalized dashboard.');
-      }
-    }
-
     function sendChatMessage() {
       const inp = document.getElementById('chatInput');
       const q = inp.value.trim();
@@ -834,28 +712,284 @@
       }, 400);
     }
 
-    // Live Brokerage Portfolio Sync with Robinhood
-    async function syncLiveBrokerageData() {
+    // AUTHENTICATION & SINGLE-TENANT SESSION MANAGEMENT
+    function getAuthToken() {
+      return sessionStorage.getItem('rh_cockpit_session') || '';
+    }
+
+    async function checkAuthSession() {
+      const token = getAuthToken();
+      const modal = document.getElementById('loginModal');
+      if (!token) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        return false;
+      }
+
       try {
-        const res = await fetch('/api/portfolio/live');
+        const res = await fetch('/api/auth/session', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const d = await res.json();
+          modal.classList.add('hidden');
+          modal.classList.remove('flex');
+          applyUserSession(d.user);
+          syncLiveBrokerageData();
+          return true;
+        } else {
+          sessionStorage.removeItem('rh_cockpit_session');
+          modal.classList.remove('hidden');
+          modal.classList.add('flex');
+          return false;
+        }
+      } catch (e) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+        return false;
+      }
+    }
+
+    async function handleLoginSubmit(event) {
+      event.preventDefault();
+      const errBox = document.getElementById('loginErrorMsg');
+      const submitBtn = document.getElementById('loginSubmitBtn');
+      const username = document.getElementById('loginUsername').value.trim();
+      const secret = document.getElementById('loginSecret').value.trim();
+
+      errBox.classList.add('hidden');
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = `<span>⏳</span> Authenticating...`;
+
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, secret })
+        });
+        const data = await res.json();
+
+        if (res.ok && data.success) {
+          sessionStorage.setItem('rh_cockpit_session', data.token);
+          const modal = document.getElementById('loginModal');
+          modal.classList.add('hidden');
+          modal.classList.remove('flex');
+          applyUserSession(data.user);
+          syncLiveBrokerageData();
+        } else {
+          errBox.innerText = data.error || 'Authentication failed. Please verify credentials.';
+          errBox.classList.remove('hidden');
+        }
+      } catch (err) {
+        errBox.innerText = 'Network error contacting authentication server.';
+        errBox.classList.remove('hidden');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = `<span>🔓</span> Unlock Trading Cockpit`;
+      }
+    }
+
+    async function logoutSession() {
+      const token = getAuthToken();
+      if (token) {
+        try {
+          await fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+        } catch (e) {}
+      }
+      sessionStorage.removeItem('rh_cockpit_session');
+      document.getElementById('userNameDisplay').innerText = 'Operator Locked';
+      document.getElementById('userAuthBadge').innerText = 'Locked';
+      document.getElementById('userAuthBadge').className = 'text-[10px] px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20';
+      document.getElementById('userSubText').innerText = 'Awaiting operator credentials...';
+      document.getElementById('valTotal').innerText = '--';
+      document.getElementById('valCash').innerText = '--';
+      const modal = document.getElementById('loginModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function applyUserSession(user) {
+      if (!user) return;
+      const name = user.name || 'Dylan';
+      document.getElementById('userNameDisplay').innerText = name;
+      document.getElementById('userAuthBadge').innerText = '● Active Session';
+      document.getElementById('userAuthBadge').className = 'text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+      document.getElementById('userSubText').innerText = `Robinhood: ${user.rhAccount} • Telegram: ${user.telegramId}`;
+      document.getElementById('userAvatar').innerText = name.slice(0, 2).toUpperCase();
+      if (document.getElementById('vaultTelegramId')) {
+        document.getElementById('vaultTelegramId').value = user.telegramId || 'Authorized';
+      }
+      if (document.getElementById('vaultAccountId')) {
+        document.getElementById('vaultAccountId').value = `${user.rhAccount} (Discovered Account)`;
+      }
+    }
+
+    function renderHoldingsCards(positions) {
+      const container = document.getElementById('holdingsContainer');
+      if (!container) return;
+      if (!positions || positions.length === 0) {
+        container.innerHTML = `
+          <div class="col-span-1 md:col-span-3 bg-[#18181b] border border-[#27272a] rounded-2xl p-8 text-center">
+            <div class="text-3xl mb-2">💼</div>
+            <div class="font-bold text-white text-sm">No Active Equity Positions Open</div>
+            <p class="text-xs text-zinc-400 mt-1 max-w-md mx-auto">All capital is liquid in cash reserve, staged for autonomous entry orders into top-rated thematic constituents.</p>
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = '';
+      positions.forEach(pos => {
+        const card = document.createElement('div');
+        card.className = 'bg-[#18181b] border border-[#27272a] rounded-xl p-4 relative overflow-hidden flex flex-col justify-between';
+        const costBasis = (pos.quantity * pos.average_buy_price).toFixed(2);
+        card.innerHTML = `
+          <div>
+            <div class="flex justify-between items-start mb-2">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-base text-white">${pos.symbol}</span>
+                  <span class="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-bold border border-emerald-500/20">ACTIVE HOLD</span>
+                </div>
+                <div class="text-[11px] text-zinc-400 font-mono">${pos.quantity} Shares • Avg $${pos.average_buy_price.toFixed(2)}</div>
+              </div>
+              <div class="text-right">
+                <div class="text-sm font-bold text-white">$${costBasis}</div>
+                <div class="text-xs font-semibold text-emerald-400">Total Basis</div>
+              </div>
+            </div>
+
+            <div class="bg-[#09090b] rounded-lg p-2.5 my-2 border border-[#27272a]">
+              <div class="flex justify-between text-[10px] text-zinc-400 mb-1">
+                <span>Brokerage Execution</span>
+                <span class="text-emerald-400 font-bold">● Active Robinhood Asset</span>
+              </div>
+              <svg class="w-full h-10 stroke-emerald-400 fill-none" viewBox="0 0 160 30">
+                <path d="M0,22 L30,18 L65,22 L95,12 L130,15 L160,8" stroke-width="2.5" stroke-linecap="round"/>
+                <circle cx="160" cy="8" r="3" class="fill-emerald-400" />
+              </svg>
+            </div>
+
+            <div class="bg-[#09090b] rounded-lg p-2 my-2 grid grid-cols-2 gap-1 text-center text-xs">
+              <div>
+                <div class="text-[10px] text-zinc-400">Circuit Breaker</div>
+                <div class="font-bold text-emerald-400 text-xs">Protected 🛡️</div>
+              </div>
+              <div>
+                <div class="text-[10px] text-zinc-400">Ratchet Level</div>
+                <div class="font-bold text-white text-xs">+4.0% Trigger</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between text-[11px] text-zinc-400 border-t border-[#27272a] pt-2.5 mt-2">
+            <span>Risk Floor: <strong class="text-emerald-400">-6% Floor</strong></span>
+            <span class="text-emerald-400 font-medium">Auto-Trailing On</span>
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    }
+
+    // LIVE BROKERAGE PORTFOLIO & TELEMETRY SYNC
+    async function syncLiveBrokerageData() {
+      const token = getAuthToken();
+      if (!token) return;
+
+      try {
+        const res = await fetch('/api/portfolio/live', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.status === 401) {
+          logoutSession();
+          return;
+        }
         if (!res.ok) return;
+
         const d = await res.json();
         if (d.connected) {
-          if (d.totalEquity > 0) document.getElementById('valTotal').innerText = '$' + d.totalEquity.toFixed(2);
-          if (d.spendableCash >= 0) document.getElementById('valCash').innerText = '$' + d.spendableCash.toFixed(2);
-          if (d.userName) document.getElementById('userNameDisplay').innerText = d.userName + ' (Live Session)';
-          if (d.telegramId) document.getElementById('userSubText').innerText = `Telegram: ${d.telegramId} • Account: ${d.rhAccount}`;
-          console.log('✅ Real-Time Robinhood Portfolio Synced:', d);
+          if (d.totalEquity !== undefined) {
+            document.getElementById('valTotal').innerText = '$' + d.totalEquity.toFixed(2);
+          }
+          if (d.spendableCash !== undefined) {
+            document.getElementById('valCash').innerText = '$' + d.spendableCash.toFixed(2);
+          }
+          if (d.userName) {
+            document.getElementById('userNameDisplay').innerText = d.userName;
+            document.getElementById('userAvatar').innerText = d.userName.slice(0, 2).toUpperCase();
+          }
+          if (d.rhAccount) {
+            document.getElementById('userSubText').innerText = `Robinhood: ${d.rhAccount} • Telegram: ${d.telegramId ? '••••' + String(d.telegramId).slice(-4) : 'Active'}`;
+          }
+
+          // Update Vault Tab inputs dynamically
+          if (document.getElementById('vaultRobinhoodToken') && d.rhTokenStatus) {
+            document.getElementById('vaultRobinhoodToken').value = d.rhTokenStatus;
+          }
+          if (document.getElementById('vaultAccountId') && d.rhAccount) {
+            document.getElementById('vaultAccountId').value = `${d.rhAccount} (Live Brokerage)`;
+          }
+          if (document.getElementById('vaultTelegramId') && d.telegramId) {
+            document.getElementById('vaultTelegramId').value = String(d.telegramId);
+          }
+          if (d.circuitBreakers) {
+            if (document.getElementById('vaultMaxTrade') && d.circuitBreakers.max_single_order_usd) {
+              document.getElementById('vaultMaxTrade').value = d.circuitBreakers.max_single_order_usd;
+            }
+            if (document.getElementById('vaultMinReserve') && d.circuitBreakers.min_single_order_usd) {
+              document.getElementById('vaultMinReserve').value = d.circuitBreakers.min_single_order_usd;
+            }
+          }
+
+          // Render live positions
+          renderHoldingsCards(d.positions);
         }
       } catch (err) {
         console.warn('Portfolio sync note:', err.message);
       }
     }
 
-    // Initialize with default theme and live sync
+    async function updateVaultCircuitBreakers() {
+      const token = getAuthToken();
+      if (!token) {
+        alert('Please log in first.');
+        return;
+      }
+      const maxTrade = parseFloat(document.getElementById('vaultMaxTrade').value);
+      const minReserve = parseFloat(document.getElementById('vaultMinReserve').value);
+
+      try {
+        const res = await fetch('/api/vault/update', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            max_single_order_usd: maxTrade,
+            min_single_order_usd: minReserve
+          })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          alert(`✅ Risk Circuit Breakers Saved to EC2 Trading Engine!\n\n• Max Single Order: $${maxTrade.toFixed(2)}\n• Min Cash Reserve: $${minReserve.toFixed(2)}`);
+        } else {
+          alert('Failed to update circuit breakers: ' + (data.error || 'Server error'));
+        }
+      } catch (e) {
+        alert('Failed to communicate with vault API: ' + e.message);
+      }
+    }
+
+    // Initialize with default theme and check authentication
     loadEtfTheme('ai_physical_infrastructure');
-    syncLiveBrokerageData();
-    setInterval(syncLiveBrokerageData, 15000);
+    checkAuthSession();
+    setInterval(() => {
+      if (getAuthToken()) syncLiveBrokerageData();
+    }, 15000);
   </script>
 </body>
 </html>

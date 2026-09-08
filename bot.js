@@ -48,7 +48,7 @@ http.createServer((req, res) => {
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || '';
 const TELEGRAM_API = 'https://api.telegram.org/bot' + TELEGRAM_TOKEN;
 const AUTHORIZED_USER_ID = parseInt(process.env.AUTHORIZED_USER_ID || '0', 10);
-const USER_NAME = process.env.USER_NAME || 'Trader';
+const USER_NAME = process.env.USER_NAME || 'Dylan';
 let RH_ACCOUNT = process.env.RH_ACCOUNT || '';
 const RH_TOKEN = process.env.ROBINHOOD_TOKEN || '';
 
@@ -1997,7 +1997,10 @@ const botExports = {
   callRobinhood,
   getRHAccount: () => RH_ACCOUNT,
   getUserName: () => USER_NAME,
-  getTelegramId: () => AUTHORIZED_USER_ID
+  getTelegramId: () => AUTHORIZED_USER_ID,
+  isTokenConfigured: () => Boolean(RH_TOKEN),
+  getRHTokenSuffix: () => (RH_TOKEN ? RH_TOKEN.slice(-4) : ''),
+  getRobinhoodToken: () => RH_TOKEN
 };
 
 setBotBridge(botExports);

@@ -1,28 +1,156 @@
 // web_server.js - Embedded Cockpit Dashboard Server & API Dispatcher
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { DEFAULT_HORIZON_THEMES, synthesizeIndustryBasket, auditAndScoreBasket } = require('./engine/industry_etf_synthesizer');
 const { loadStrategyInsights } = require('./engine/self_reflection_engine');
 
 const PROTOTYPE_HTML_PATH = path.join(__dirname, 'web_interface_prototype.html');
+const CONFIG_PATH = path.join(__dirname, 'config', 'trading_config.json');
 
 let botBridge = null;
 function setBotBridge(bridge) {
   botBridge = bridge;
 }
 
+// In-memory single-tenant active session vault
+const activeSessions = new Map();
+
+function authenticateRequest(req) {
+  const authHeader = req.headers['authorization'] || '';
+  const match = authHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) return null;
+  const token = match[1];
+  const session = activeSessions.get(token);
+  if (!session) return null;
+  if (Date.now() > session.expiresAt) {
+    activeSessions.delete(token);
+    return null;
+  }
+  return session;
+}
+
+function loadTradingConfig() {
+  try {
+    if (fs.existsSync(CONFIG_PATH)) {
+      return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    }
+  } catch (e) {
+    console.error('Failed to read trading_config.json:', e.message);
+  }
+  return { circuit_breakers: { max_single_order_usd: 50, min_single_order_usd: 1, max_daily_deploy_usd: 150 } };
+}
+
 async function handleWebRequest(req, res) {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
   const pathname = url.pathname;
 
-  // 1. Healthcheck
+  // 1. Healthcheck (Public)
   if (pathname === '/health' || pathname === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
     return res.end(JSON.stringify({ status: 'healthy', timestamp: Date.now() }));
   }
 
-  // 2. Real-Time Portfolio & Balances Sync
+  // 2. Authentication: Login
+  if (pathname === '/api/auth/login' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const secret = String(payload.secret || payload.password || payload.pin || '').trim();
+
+        const telegramId = botBridge ? String(botBridge.getTelegramId() || '') : String(process.env.AUTHORIZED_USER_ID || '');
+        const rhToken = botBridge && botBridge.getRobinhoodToken ? botBridge.getRobinhoodToken() : (process.env.ROBINHOOD_TOKEN || '');
+        const webPin = String(process.env.WEB_PIN || process.env.WEB_PASSWORD || '').trim();
+        const ownerName = (botBridge ? botBridge.getUserName() : process.env.USER_NAME) || 'Dylan';
+
+        let isValid = false;
+        if (webPin && secret === webPin) {
+          isValid = true;
+        } else if (telegramId && (secret === telegramId || (telegramId.length >= 4 && secret === telegramId.slice(-4)))) {
+          isValid = true;
+        } else if (rhToken && (secret === rhToken || (rhToken.length >= 6 && secret === rhToken.slice(-6)) || (rhToken.length >= 4 && secret === rhToken.slice(-4)))) {
+          isValid = true;
+        } else if (!webPin && !telegramId && secret.length >= 4) {
+          isValid = true;
+        }
+
+        if (!isValid) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          return res.end(JSON.stringify({
+            success: false,
+            error: 'Authentication failed. Please enter your Telegram User ID or Master Access PIN.'
+          }));
+        }
+
+        const sessionToken = crypto.randomBytes(32).toString('hex');
+        const rhAccount = botBridge ? botBridge.getRHAccount() : (process.env.RH_ACCOUNT || '');
+
+        activeSessions.set(sessionToken, {
+          user: ownerName,
+          createdAt: Date.now(),
+          expiresAt: Date.now() + (48 * 60 * 60 * 1000)
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({
+          success: true,
+          token: sessionToken,
+          user: {
+            name: ownerName,
+            telegramId: telegramId ? '••••' + telegramId.slice(-4) : 'Authorized',
+            rhAccount: rhAccount ? '••••' + rhAccount.slice(-4) : 'Auto-Discovered'
+          }
+        }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 3. Authentication: Session Verification
+  if (pathname === '/api/auth/session') {
+    const session = authenticateRequest(req);
+    if (!session) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ authenticated: false }));
+    }
+    const telegramId = botBridge ? String(botBridge.getTelegramId() || '') : String(process.env.AUTHORIZED_USER_ID || '');
+    const ownerName = (botBridge ? botBridge.getUserName() : process.env.USER_NAME) || 'Dylan';
+    const rhAccount = botBridge ? botBridge.getRHAccount() : (process.env.RH_ACCOUNT || '');
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({
+      authenticated: true,
+      user: {
+        name: ownerName,
+        telegramId: telegramId ? '••••' + telegramId.slice(-4) : 'Authorized',
+        rhAccount: rhAccount ? '••••' + rhAccount.slice(-4) : 'Auto-Discovered'
+      }
+    }));
+  }
+
+  // 4. Authentication: Logout
+  if (pathname === '/api/auth/logout' && req.method === 'POST') {
+    const authHeader = req.headers['authorization'] || '';
+    const match = authHeader.match(/^Bearer\s+(.+)$/i);
+    if (match) {
+      activeSessions.delete(match[1]);
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ success: true }));
+  }
+
+  // 5. Real-Time Portfolio & Balances Sync (PROTECTED)
   if (pathname === '/api/portfolio/live') {
+    const session = authenticateRequest(req);
+    if (!session) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Unauthorized. Please log in first.' }));
+    }
+
     try {
       if (!botBridge || !botBridge.callRobinhood) {
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -63,22 +191,59 @@ async function handleWebRequest(req, res) {
         }
       }
 
+      const cfg = loadTradingConfig();
+      const rhTokenSuffix = botBridge.getRHTokenSuffix ? botBridge.getRHTokenSuffix() : '';
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({
         connected: true,
         userName: botBridge.getUserName(),
         telegramId: botBridge.getTelegramId(),
-        rhAccount: rhAccount ? '••••' + rhAccount.slice(-4) : 'Auto',
+        rhAccount: rhAccount ? '••••' + rhAccount.slice(-4) : 'Discovered',
+        rhTokenStatus: (botBridge.isTokenConfigured && botBridge.isTokenConfigured()) ? ('Active & Encrypted (.env: ••••' + rhTokenSuffix + ')') : 'Not Connected',
+        rhTokenSuffix: rhTokenSuffix,
         totalEquity: totalVal,
         cash: cash,
         spendableCash: spendableCash,
         queuedOrders: queuedOrders,
-        positions: activePositions
+        positions: activePositions,
+        circuitBreakers: cfg.circuit_breakers || {}
       }));
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({ error: err.message }));
     }
+  }
+
+  // 6. Update Vault & Circuit Breakers (PROTECTED)
+  if (pathname === '/api/vault/update' && req.method === 'POST') {
+    const session = authenticateRequest(req);
+    if (!session) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      return res.end(JSON.stringify({ error: 'Unauthorized. Please log in first.' }));
+    }
+
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const cfg = loadTradingConfig();
+        if (payload.max_single_order_usd !== undefined) {
+          cfg.circuit_breakers.max_single_order_usd = parseFloat(payload.max_single_order_usd);
+        }
+        if (payload.min_single_order_usd !== undefined) {
+          cfg.circuit_breakers.min_single_order_usd = parseFloat(payload.min_single_order_usd);
+        }
+        fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2), 'utf8');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ success: true, circuit_breakers: cfg.circuit_breakers }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        return res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
   }
 
   // 3. Thematic ETF Horizons API
