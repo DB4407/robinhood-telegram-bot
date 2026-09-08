@@ -35,12 +35,14 @@ function loadEnv() {
 }
 loadEnv();
 
-// Security: Localhost binding only (prevents external port scanning)
+// Modular Web Dashboard & API Server
+const { handleWebRequest } = require('./web_server');
 const PORT = process.env.PORT || 10000;
 http.createServer((req, res) => {
-  res.writeHead(200, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify({ status: 'healthy', timestamp: Date.now() }));
-}).listen(PORT, '127.0.0.1');
+  handleWebRequest(req, res);
+}).listen(PORT, '0.0.0.0', () => {
+  console.log(`🌐 [WEB COCKPIT] Active and serving dashboard on port ${PORT}`);
+});
 
 // Security: Load tokens exclusively from environment variables (.env)
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN || '';

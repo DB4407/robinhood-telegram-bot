@@ -1,18 +1,18 @@
 {
-  "last_updated": "2026-08-27T21:48:37.781Z",
+  "last_updated": "2026-09-08T18:43:05.338Z",
   "total_trades_analyzed": 9,
   "wins": 8,
   "losses": 1,
   "win_rate_pct": 88.9,
   "total_realized_usd": 11.65,
-  "market_regime": "High-Beta Expansion (Bullish Tailwinds Active)",
+  "market_regime": "Bullish Tech Momentum",
   "active_weights": {
-    "volumeAnomaly": 1.33587,
-    "rsiState": -0.76449,
-    "momentum5d": 1.20999,
-    "volatilitySqueeze": 1.48183,
-    "trendAlignment": 1.24434,
-    "squeezeVolumeInteraction": 1.89687,
+    "volumeAnomaly": 1.48803,
+    "rsiState": -0.79948,
+    "momentum5d": 1.41443,
+    "volatilitySqueeze": 1.52282,
+    "trendAlignment": 1.40809,
+    "squeezeVolumeInteraction": 1.97326,
     "sentimentFactor": 0.8554
   },
   "alpha_drivers": [

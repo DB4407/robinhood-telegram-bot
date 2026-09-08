@@ -1,7 +1,11 @@
 const fs = require('fs');
 const path = require('path');
+const EventEmitter = require('events');
 
 const JOURNAL_PATH = path.join(__dirname, '..', 'data', 'trades_journal.jsonl');
+
+// Modular Trade Event Bus
+const tradeEvents = new EventEmitter();
 
 function appendJournalEntry(record) {
   try {
@@ -43,6 +47,7 @@ function logTradeEntry(data) {
   };
   appendJournalEntry(entry);
   console.log('[TRADE JOURNAL] Logged ENTRY for ' + entry.symbol + ' ($' + entry.amountUSD.toFixed(2) + ')');
+  tradeEvents.emit('trade_entry', entry);
   return entry;
 }
 
@@ -63,6 +68,21 @@ function logTradeExit(data) {
   };
   appendJournalEntry(exit);
   console.log('[TRADE JOURNAL] Logged EXIT for ' + exit.symbol + ' (' + (exit.realizedPnlPct >= 0 ? '+' : '') + exit.realizedPnlPct.toFixed(2) + '%) - Reason: ' + exit.exitReason);
+  
+  // Emit event to notify modular subscribers (Feedback Optimizer, Self-Reflection Engine, Telemetry)
+  tradeEvents.emit('trade_exit', exit);
+  
+  // Lazy trigger self-learning & reflection modules to avoid circular require issues
+  try {
+    const { optimizeWeightsFromHistory } = require('./feedback_optimizer');
+    const { performStrategyReflection } = require('./self_reflection_engine');
+    optimizeWeightsFromHistory();
+    performStrategyReflection();
+    console.log('[MODULAR PIPELINE] Auto-triggered model calibration and strategy reflection after exit.');
+  } catch (err) {
+    console.warn('[MODULAR PIPELINE] Post-exit auto-update note:', err.message);
+  }
+
   return exit;
 }
 
@@ -70,5 +90,6 @@ module.exports = {
   logTradeEntry,
   logTradeExit,
   getCompletedTrades,
+  tradeEvents,
   JOURNAL_PATH
 };

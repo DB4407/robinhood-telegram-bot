@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Autonomous AI Trading Cockpit - Synthetic ETF & Multi-Tenant Hub</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    .pulse-glow {
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.25);
+    }
+    input[type=range]::-webkit-slider-thumb {
+      background-color: #10b981;
+    }
+  </style>
+</head>
+<body class="bg-[#09090b] text-[#f4f4f5] font-sans antialiased p-4 md:p-6 min-h-screen">
+
+  <!-- Top Navigation / User Header -->
+  <header class="bg-[#18181b] border border-[#27272a] rounded-2xl p-4 mb-6 shadow-xl flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-xl">
+        👨‍✈️
+      </div>
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="font-bold text-lg text-white">AI Trading Cockpit</h1>
+          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping"></span> Live Multi-Tenant
+          </span>
+          <span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-500/10 text-purple-400 border border-purple-500/20">
+            Grok Synthetic ETF Architect
+          </span>
+        </div>
+        <p class="text-xs text-zinc-400">Thematic Basket Synthesis • Journal-Calibrated Scoring • Autonomous Risk Restructuring</p>
+      </div>
+    </div>
+
+    <!-- Active User & Session Switcher Simulator -->
+    <div class="flex items-center gap-3 bg-[#09090b] px-3.5 py-2 rounded-xl border border-[#27272a]">
+      <div class="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs border border-emerald-500/30" id="userAvatar">
+        DY
+      </div>
+      <div class="text-left text-xs">
+        <div class="font-semibold text-white flex items-center gap-1.5">
+          <span id="userNameDisplay">Dylan (Active Session)</span>
+          <span class="text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">AES-256 Encrypted</span>
+        </div>
+        <div class="text-zinc-400 text-[11px]" id="userSubText">Robinhood: ••••4812 • Target ETF: GIGA (Physical AI)</div>
+      </div>
+      <select id="userSelector" onchange="switchUser(this.value)" class="bg-[#18181b] text-zinc-200 text-xs border border-[#27272a] rounded-lg px-2.5 py-1.5 ml-2 focus:outline-none focus:ring-1 focus:ring-emerald-500 cursor-pointer">
+        <option value="dylan">User 1: Dylan (AI Hardware / GIGA)</option>
+        <option value="friend">User 2: Jordan (Nuclear Energy / NUKE)</option>
+        <option value="new">+ Add Friend Account (New Tenant)</option>
+      </select>
+    </div>
+  </header>
+
+  <!-- Macro Climate & Account Gauges Bar -->
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
+      <div class="text-xs text-zinc-400 font-medium">Total Portfolio Equity</div>
+      <div class="text-2xl font-extrabold text-white mt-1" id="valTotal">$116.48</div>
+      <div class="text-xs text-emerald-400 mt-1 flex items-center gap-1 font-semibold" id="valPnlSub">
+        <span>▲ +8.2%</span> <span class="text-zinc-500 font-normal">all-time realized</span>
+      </div>
+    </div>
+
+    <div class="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
+      <div class="text-xs text-zinc-400 font-medium">Spendable Cash Reserve</div>
+      <div class="text-2xl font-extrabold text-blue-400 mt-1" id="valCash">$14.20</div>
+      <div class="text-[11px] text-zinc-400 mt-1" id="valCashSub">
+        Circuit Breaker: Min $10 reserve protected
+      </div>
+    </div>
+
+    <div class="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
+      <div class="text-xs text-zinc-400 font-medium">Market Index Governor</div>
+      <div class="text-sm font-bold text-emerald-400 mt-2 flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span> CLEAR (Bullish Tailwinds)
+      </div>
+      <div class="text-[11px] text-zinc-400 mt-1">
+        QQQ: <span class="text-emerald-400">+0.64%</span> • SOXX: <span class="text-emerald-400">+1.12%</span>
+      </div>
+    </div>
+
+    <div class="bg-[#18181b] border border-[#27272a] rounded-xl p-4">
+      <div class="text-xs text-zinc-400 font-medium">Historical Win Rate & Journal</div>
+      <div class="text-2xl font-extrabold text-purple-400 mt-1" id="valWinRate">88.9%</div>
+      <div class="text-[11px] text-zinc-400 mt-1" id="valJournalSub">
+        8 Wins / 1 Loss • Top Exit: INTC (+32.5%)
+      </div>
+    </div>
+  </div>
+
+  <!-- NAVIGATION TABS -->
+  <div class="flex gap-2 border-b border-[#27272a] pb-3 mb-6">
+    <button onclick="setTab('etf')" id="tabBtn-etf" class="px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-500 text-black shadow-sm transition">
+      🌐 Thematic ETF Architect (Grok Synthesizer)
+    </button>
+    <button onclick="setTab('holdings')" id="tabBtn-holdings" class="px-4 py-2 rounded-xl text-xs font-medium bg-[#18181b] text-zinc-400 hover:text-white transition">
+      📊 Active Holdings & Sparkline Charts
+    </button>
+    <button onclick="setTab('radar')" id="tabBtn-radar" class="px-4 py-2 rounded-xl text-xs font-medium bg-[#18181b] text-zinc-400 hover:text-white transition">
+      🎯 Predictive Breakout Radar
+    </button>
+    <button onclick="setTab('pilot')" id="tabBtn-pilot" class="px-4 py-2 rounded-xl text-xs font-medium bg-[#18181b] text-zinc-400 hover:text-white transition">
+      👨‍✈️ AI Pilot Chat & Restructuring Feed
+    </button>
+    <button onclick="setTab('security')" id="tabBtn-security" class="px-4 py-2 rounded-xl text-xs font-medium bg-[#18181b] text-zinc-400 hover:text-white transition">
+      🔒 Cloud Vault & Multi-Tenant Security
+    </button>
+  </div>
+
+  <!-- TAB 0: THEMATIC ETF ARCHITECT (NEW!) -->
+  <div id="tab-etf" class="space-y-6">
+    <!-- ETF Horizon Builder Card -->
+    <div class="bg-gradient-to-r from-[#18181b] via-[#202024] to-[#18181b] border border-[#27272a] rounded-2xl p-5 shadow-lg">
+      <div class="flex flex-wrap items-center justify-between gap-4 border-b border-[#27272a] pb-4 mb-4">
+        <div>
+          <h2 class="font-bold text-sm text-white flex items-center gap-2">
+            <span>🌐 Grok Dynamic ETF Synthesizer & Quant Evaluator</span>
+            <span class="text-[10px] px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20 font-mono">Powered by Grok LPU</span>
+          </h2>
+          <p class="text-xs text-zinc-400 mt-0.5">
+            Grok analyzes industry monopoly moats, creates a custom index basket (like your own private ETF), and audits each ticker against our trade journal rules.
+          </p>
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="text" id="customIndustryInput" placeholder="Or type custom niche (e.g. 'Sovereign Drone AI')..." 
+                 class="bg-[#09090b] text-xs text-white border border-[#27272a] rounded-xl px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-purple-500 w-64">
+          <button onclick="synthesizeCustomTheme()" class="px-3.5 py-1.5 bg-purple-500 hover:bg-purple-400 text-white font-bold text-xs rounded-xl transition flex items-center gap-1">
+            <span>⚡</span> Synthesize
+          </button>
+        </div>
+      </div>
+
+      <!-- Quick Industry Selector Buttons -->
+      <div class="flex flex-wrap gap-2 mb-4">
+        <button onclick="loadEtfTheme('ai_physical_infrastructure')" id="btn-theme-ai" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition">
+          ⚡ Physical AI & Compute (GIGA)
+        </button>
+        <button onclick="loadEtfTheme('clean_energy_supergrid')" id="btn-theme-energy" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#09090b] text-zinc-400 border border-[#27272a] hover:text-white transition">
+          🔋 Nuclear Baseload & Supergrid (NUKE)
+        </button>
+        <button onclick="loadEtfTheme('autonomous_defense_cyber')" id="btn-theme-cyber" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#09090b] text-zinc-400 border border-[#27272a] hover:text-white transition">
+          🛡️ Autonomous Defense & Cyber (SHLD)
+        </button>
+        <button onclick="loadEtfTheme('space_quantum_frontier')" id="btn-theme-space" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#09090b] text-zinc-400 border border-[#27272a] hover:text-white transition">
+          🚀 Space Economy & Telecom (ORBT)
+        </button>
+        <button onclick="loadEtfTheme('consumer_monopolies_defensive')" id="btn-theme-fort" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#09090b] text-zinc-400 border border-[#27272a] hover:text-white transition">
+          🛒 Cash Flow Titans (FORT)
+        </button>
+      </div>
+
+      <!-- Active Synthesized ETF Thesis Banner -->
+      <div class="p-4 rounded-xl bg-[#09090b] border border-[#27272a] flex flex-col md:flex-row justify-between gap-4 items-start md:items-center">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="text-xl font-extrabold text-white" id="etfBadgeTitle">GIGA</span>
+            <span class="text-xs text-zinc-400" id="etfFullName">⚡ Physical AI Infrastructure & Supercomputing</span>
+          </div>
+          <p class="text-xs text-zinc-300 mt-1 max-w-3xl leading-relaxed" id="etfThesisText">
+            Physical infrastructure bottlenecks (liquid cooling, custom ASICs, optical networking, and foundry capacity) command unmatched pricing power during the AI compute buildout.
+          </p>
+        </div>
+        <div class="flex flex-col items-end gap-1 whitespace-nowrap">
+          <span class="text-[10px] text-zinc-400">Journal Assessment:</span>
+          <span class="text-xs font-bold text-emerald-400">88.9% Empirical Win Alignment</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Ticker Assessment & Readiness Matrix Table -->
+    <div class="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden shadow-sm">
+      <div class="p-4 border-b border-[#27272a] flex justify-between items-center">
+        <div>
+          <h3 class="font-bold text-sm text-white">Grok Index Holdings & Trade Journal Readiness</h3>
+          <p class="text-xs text-zinc-400">Evaluated against RSI exhaustion rules, volatility squeeze status, and profit target parameters.</p>
+        </div>
+        <span class="text-xs px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium" id="etfCountLabel">
+          5 Constituent Tickers
+        </span>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-[#09090b] text-zinc-400 border-b border-[#27272a]">
+            <tr>
+              <th class="p-3">Constituent Ticker</th>
+              <th class="p-3">Supply Chain Niche</th>
+              <th class="p-3">Price</th>
+              <th class="p-3">14D RSI</th>
+              <th class="p-3">Breakout Odds</th>
+              <th class="p-3">Buy Readiness & Journal Assessment</th>
+              <th class="p-3 text-right">Pilot Action</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[#27272a] text-white" id="etfTableBody">
+            <!-- Dynamic rows will be rendered here -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tactical Rebalance Action Box -->
+    <div class="p-4 rounded-xl bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent border border-emerald-500/30 flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <h4 class="font-bold text-sm text-emerald-400 flex items-center gap-1.5">
+          <span>⚡</span> Rebalance Holdings into this Custom ETF
+        </h4>
+        <p class="text-xs text-zinc-300 mt-0.5" id="etfRebalanceHint">
+          The AI Pilot will liquidate out-of-theme holdings (e.g. WMT) and allocate spendable cash into the top-rated buy constituent.
+        </p>
+      </div>
+      <button onclick="executeBasketRebalance()" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs rounded-xl transition shadow-md shadow-emerald-500/20">
+        Execute Basket Rebalance on Robinhood
+      </button>
+    </div>
+  </div>
+
+  <!-- TAB 1: ACTIVE HOLDINGS WITH LIVE CHARTS -->
+  <div id="tab-holdings" class="hidden space-y-6">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="holdingsContainer">
+      <!-- Card 1: NVDA -->
+      <div class="bg-[#18181b] border border-[#27272a] rounded-xl p-4 relative overflow-hidden flex flex-col justify-between">
+        <div>
+          <div class="flex justify-between items-start mb-2">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-base text-white">NVDA</span>
+                <span class="text-xs px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-bold border border-emerald-500/20">AI LEAD</span>
+              </div>
+              <div class="text-[11px] text-zinc-400">GPU Silicon & AI Compute</div>
+            </div>
+            <div class="text-right">
+              <div class="text-sm font-bold text-white">$230.19</div>
+              <div class="text-xs font-semibold text-emerald-400">+7.1% PnL</div>
+            </div>
+          </div>
+
+          <div class="bg-[#09090b] rounded-lg p-2.5 my-2 border border-[#27272a]">
+            <div class="flex justify-between text-[10px] text-zinc-400 mb-1">
+              <span>7-Day Price Trajectory</span>
+              <span class="text-emerald-400 font-bold">▲ Strong Upward Momentum</span>
+            </div>
+            <svg class="w-full h-12 stroke-emerald-400 fill-none" viewBox="0 0 160 40">
+              <path d="M0,32 L25,28 L50,30 L75,20 L100,22 L125,12 L160,6" stroke-width="2.5" stroke-linecap="round"/>
+              <circle cx="160" cy="6" r="3" class="fill-emerald-400" />
+            </svg>
+            <div class="flex justify-between text-[9px] text-zinc-500 mt-1">
+              <span>$214.90 (7d ago)</span>
+              <span>$230.19 (Now)</span>
+            </div>
+          </div>
+
+          <div class="bg-[#09090b] rounded-lg p-2 my-2 grid grid-cols-3 gap-1 text-center text-xs">
+            <div>
+              <div class="text-[10px] text-zinc-400">Breakout</div>
+              <div class="font-extrabold text-emerald-400 text-xs">95.3%</div>
+            </div>
+            <div>
+              <div class="text-[10px] text-zinc-400">14D RSI</div>
+              <div class="font-bold text-white text-xs">53.6</div>
+            </div>
+            <div>
+              <div class="text-[10px] text-zinc-400">Squeeze</div>
+              <div class="font-bold text-amber-400 text-xs">⚡ ACTIVE</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between text-[11px] text-zinc-400 border-t border-[#27272a] pt-2.5 mt-2">
+          <span>Stop Floor: <strong class="text-red-400">$202.10 (-6%)</strong></span>
+          <span class="text-emerald-400 font-medium">Breakeven Ratchet Active 🛡️</span>
+        </div>
+      </div>
+
+      <!-- Card 2: INTC -->
+      <div class="bg-[#18181b] border border-[#27272a] rounded-xl p-4 relative overflow-hidden flex flex-col justify-between">
+        <div>
+          <div class="flex justify-between items-start mb-2">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-base text-white">INTC</span>
+                <span class="text-xs px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 font-bold border border-blue-500/20">FOUNDRY</span>
+              </div>
+              <div class="text-[11px] text-zinc-400">US Foundry Turnaround</div>
+            </div>
+            <div class="text-right">
+              <div class="text-sm font-bold text-white">$94.82</div>
+              <div class="text-xs font-semibold text-emerald-400">+11.5% PnL</div>
+            </div>
+          </div>
+
+          <div class="bg-[#09090b] rounded-lg p-2.5 my-2 border border-[#27272a]">
+            <div class="flex justify-between text-[10px] text-zinc-400 mb-1">
+              <span>7-Day Price Trajectory</span>
+              <span class="text-blue-400 font-bold">▲ Consolidation Base</span>
+            </div>
+            <svg class="w-full h-12 stroke-blue-400 fill-none" viewBox="0 0 160 40">
+              <path d="M0,25 L30,22 L60,26 L90,18 L120,20 L160,14" stroke-width="2.5" stroke-linecap="round"/>
+              <circle cx="160" cy="14" r="3" class="fill-blue-400" />
+            </svg>
+            <div class="flex justify-between text-[9px] text-zinc-500 mt-1">
+              <span>$85.00 (7d ago)</span>
+              <span>$94.82 (Now)</span>
+            </div>
+          </div>
+
+          <div class="bg-[#09090b] rounded-lg p-2 my-2 grid grid-cols-3 gap-1 text-center text-xs">
+            <div>
+              <div class="text-[10px] text-zinc-400">Breakout</div>
+              <div class="font-extrabold text-blue-400 text-xs">34.8%</div>
+            </div>
+            <div>
+              <div class="text-[10px] text-zinc-400">14D RSI</div>
+              <div class="font-bold text-white text-xs">35.6</div>
+            </div>
+            <div>
+              <div class="text-[10px] text-zinc-400">Squeeze</div>
+              <div class="font-bold text-zinc-400 text-xs">Normal</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between text-[11px] text-zinc-400 border-t border-[#27272a] pt-2.5 mt-2">
+          <span>Stop Floor: <strong class="text-emerald-400">$85.00 ($0 Risk)</strong></span>
+          <span class="text-blue-400 font-medium">+8% TP Ready 🎯</span>
+        </div>
+      </div>
+
+      <!-- Card 3: WMT (Laggard) -->
+      <div class="bg-[#18181b] border border-amber-500/30 rounded-xl p-4 relative overflow-hidden flex flex-col justify-between">
+        <div>
+          <div class="flex justify-between items-start mb-2">
+            <div>
+              <div class="flex items-center gap-2">
+                <span class="font-bold text-base text-white">WMT</span>
+                <span class="text-xs px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 font-bold border border-amber-500/20">⚠️ ROTATE OUT</span>
+              </div>
+              <div class="text-[11px] text-zinc-400">Consumer Defensive (Non-AI)</div>
+            </div>
+            <div class="text-right">
+              <div class="text-sm font-bold text-white">$107.17</div>
+              <div class="text-xs font-semibold text-emerald-400">+12.8% PnL</div>
+            </div>
+          </div>
+
+          <div class="bg-[#09090b] rounded-lg p-2.5 my-2 border border-[#27272a]">
+            <div class="flex justify-between text-[10px] text-zinc-400 mb-1">
+              <span>7-Day Price Trajectory</span>
+              <span class="text-amber-400 font-bold">▶ Sideways / Low Vol</span>
+            </div>
+            <svg class="w-full h-12 stroke-amber-400 fill-none" viewBox="0 0 160 40">
+              <path d="M0,18 L30,22 L60,19 L90,21 L120,18 L160,20" stroke-width="2.5" stroke-linecap="round"/>
+              <circle cx="160" cy="20" r="3" class="fill-amber-400" />
+            </svg>
+            <div class="flex justify-between text-[9px] text-zinc-500 mt-1">
+              <span>$106.80 (7d ago)</span>
+              <span>$107.17 (Now)</span>
+            </div>
+          </div>
+
+          <div class="bg-[#09090b] rounded-lg p-2 my-2 grid grid-cols-3 gap-1 text-center text-xs">
+            <div>
+              <div class="text-[10px] text-zinc-400">Breakout</div>
+              <div class="font-extrabold text-red-400 text-xs">3.8%</div>
+            </div>
+            <div>
+              <div class="text-[10px] text-zinc-400">14D RSI</div>
+              <div class="font-bold text-white text-xs">36.3</div>
+            </div>
+            <div>
+              <div class="text-[10px] text-zinc-400">Squeeze</div>
+              <div class="font-bold text-zinc-500 text-xs">None</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between text-[11px] text-zinc-400 border-t border-[#27272a] pt-2.5 mt-2">
+          <span>Stagnant Capital</span>
+          <button onclick="setTab('etf')" class="text-amber-400 hover:underline font-bold">Rotate into Target ETF &rarr;</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: PREDICTIVE BREAKOUT RADAR -->
+  <div id="tab-radar" class="hidden space-y-4">
+    <div class="bg-[#18181b] border border-[#27272a] rounded-xl overflow-hidden shadow-sm">
+      <div class="p-4 border-b border-[#27272a] flex justify-between items-center">
+        <div>
+          <h2 class="font-bold text-sm text-white">Target Industry Breakout Candidates</h2>
+          <p class="text-xs text-zinc-400">Ranked dynamically by RSI, Volatility Squeeze, and Volume Anomaly</p>
+        </div>
+        <span class="text-xs px-2 py-1 rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+          Horizon: 3-5 Days
+        </span>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-[#09090b] text-zinc-400 border-b border-[#27272a]">
+            <tr>
+              <th class="p-3">Ticker / Company</th>
+              <th class="p-3">Sector</th>
+              <th class="p-3">Price</th>
+              <th class="p-3">Breakout Odds</th>
+              <th class="p-3">RSI (14D)</th>
+              <th class="p-3">Volatility State</th>
+              <th class="p-3">Volume Spike</th>
+              <th class="p-3 text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-[#27272a] text-white">
+            <tr class="hover:bg-zinc-800/50 transition">
+              <td class="p-3 font-bold flex items-center gap-2">
+                <span class="text-emerald-400">🔹</span> VRT <span class="text-[10px] text-zinc-400 font-normal">Vertiv Holdings</span>
+              </td>
+              <td class="p-3 text-zinc-400">Liquid Cooling & Thermals</td>
+              <td class="p-3 font-semibold">$276.88</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">82.6%</span></td>
+              <td class="p-3 font-mono">53.6</td>
+              <td class="p-3 text-amber-400 font-medium">⚡ Squeeze Coiling</td>
+              <td class="p-3">1.48x</td>
+              <td class="p-3 text-right">
+                <button onclick="alert('Queued BUY $15 of VRT on user Robinhood account')" class="px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs transition">
+                  Buy $15
+                </button>
+              </td>
+            </tr>
+
+            <tr class="hover:bg-zinc-800/50 transition">
+              <td class="p-3 font-bold flex items-center gap-2">
+                <span class="text-emerald-400">🔹</span> CRWD <span class="text-[10px] text-zinc-400 font-normal">CrowdStrike</span>
+              </td>
+              <td class="p-3 text-zinc-400">Autonomous Cyber Defense</td>
+              <td class="p-3 font-semibold">$212.48</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">84.6%</span></td>
+              <td class="p-3 font-mono">48.2</td>
+              <td class="p-3 text-amber-400 font-medium">⚡ Squeeze Coiling</td>
+              <td class="p-3">1.56x</td>
+              <td class="p-3 text-right">
+                <button onclick="alert('Queued BUY $15 of CRWD on user Robinhood account')" class="px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs transition">
+                  Buy $15
+                </button>
+              </td>
+            </tr>
+
+            <tr class="hover:bg-zinc-800/50 transition">
+              <td class="p-3 font-bold flex items-center gap-2">
+                <span class="text-blue-400">🔹</span> ANET <span class="text-[10px] text-zinc-400 font-normal">Arista</span>
+              </td>
+              <td class="p-3 text-zinc-400">AI Cluster Networking</td>
+              <td class="p-3 font-semibold">$192.08</td>
+              <td class="p-3"><span class="px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 font-bold">59.3%</span></td>
+              <td class="p-3 font-mono">42.1</td>
+              <td class="p-3 text-amber-400 font-medium">⚡ Squeeze Coiling</td>
+              <td class="p-3">1.12x</td>
+              <td class="p-3 text-right">
+                <button onclick="alert('Queued BUY $10 of ANET on user Robinhood account')" class="px-2.5 py-1 rounded bg-zinc-700 hover:bg-zinc-600 text-white font-bold text-xs transition">
+                  Buy $10
+                </button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 3: AI PILOT FEED & CHAT -->
+  <div id="tab-pilot" class="hidden space-y-4">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="md:col-span-2 bg-[#18181b] border border-[#27272a] rounded-xl p-4 flex flex-col h-[450px]">
+        <div class="border-b border-[#27272a] pb-2 mb-3 flex justify-between items-center">
+          <div class="font-bold text-xs text-white flex items-center gap-2">
+            <span>🧠 Autonomous AI Pilot (Restructuring & Inference)</span>
+            <span class="text-[10px] px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">Groq LPU (GPT-120B)</span>
+          </div>
+          <span class="text-[11px] text-zinc-400">Latency: 110ms</span>
+        </div>
+
+        <div class="flex-1 overflow-y-auto space-y-3 text-xs pr-1" id="chatFeed">
+          <div class="bg-[#09090b] p-3 rounded-xl border border-[#27272a]">
+            <div class="font-bold text-emerald-400 mb-1 flex items-center gap-1">
+              👨‍✈️ AI Pilot Briefing • User Tailored Session
+            </div>
+            <p class="text-zinc-300 leading-relaxed" id="pilotWelcomeMsg">
+              Welcome Dylan. Currently targeting the <strong>GIGA (Physical AI Infrastructure)</strong> custom basket. 
+              Our trade journal confirms that holding oversold hardware compounders (INTC +32.5%, MRVL +10.4%) yields an 88.9% win rate. 
+              Underperforming retail position WMT is primed for rotation into <strong>VRT</strong> or <strong>SU</strong>.
+            </p>
+          </div>
+        </div>
+
+        <div class="pt-3 border-t border-[#27272a] flex gap-2 mt-auto">
+          <input type="text" id="chatInput" placeholder="Ask Rob to evaluate an ETF basket, analyze a ticker's RSI, or rebalance..." 
+                 class="flex-1 bg-[#09090b] text-xs text-white border border-[#27272a] rounded-xl px-3 py-2 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+          <button onclick="sendChatMessage()" class="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs rounded-xl transition">
+            Send Instruction
+          </button>
+        </div>
+      </div>
+
+      <div class="bg-[#18181b] border border-[#27272a] rounded-xl p-4 flex flex-col justify-between">
+        <div>
+          <h3 class="font-bold text-xs text-white mb-3 flex items-center gap-1.5">
+            📖 Personal Flight Journal Memory
+          </h3>
+          <div class="space-y-2 text-xs">
+            <div class="p-2 rounded bg-[#09090b] border border-[#27272a] flex justify-between">
+              <span class="font-bold text-emerald-400">MRVL (+$1.30)</span>
+              <span class="text-zinc-400">+10.4% • TAKE_PROFIT</span>
+            </div>
+            <div class="p-2 rounded bg-[#09090b] border border-[#27272a] flex justify-between">
+              <span class="font-bold text-emerald-400">INTC (+$4.40)</span>
+              <span class="text-zinc-400">+32.5% • TAKE_PROFIT</span>
+            </div>
+            <div class="p-2 rounded bg-[#09090b] border border-[#27272a] flex justify-between">
+              <span class="font-bold text-emerald-400">NVDA (+$1.72)</span>
+              <span class="text-zinc-400">+8.0% • TAKE_PROFIT</span>
+            </div>
+            <div class="p-2 rounded bg-[#09090b] border border-[#27272a] flex justify-between">
+              <span class="font-bold text-red-400">OOMA (-$0.39)</span>
+              <span class="text-zinc-400">-6.4% • STOP_LOSS</span>
+            </div>
+          </div>
+        </div>
+        <div class="mt-4 p-2.5 rounded-lg bg-purple-500/10 border border-purple-500/20 text-[11px] text-purple-300">
+          🧠 <strong>Learned Rule:</strong> Avoid buying tickers with RSI &gt; 72 (overbought exhaustion). Target coiling squeeze setups above -6% stop floor.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 4: MULTI-TENANT SECURITY & VAULT -->
+  <div id="tab-security" class="hidden space-y-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="bg-[#18181b] border border-[#27272a] rounded-xl p-5">
+        <h2 class="font-bold text-sm text-white mb-2 flex items-center gap-2">
+          <span>🔒 Bank-Grade Multi-Tenant & Cloud Security</span>
+          <span class="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Zero-Leak Guarantee</span>
+        </h2>
+        <p class="text-xs text-zinc-400 mb-4 leading-relaxed">
+          How accounts, cloud databases, and API keys are isolated and protected:
+        </p>
+
+        <div class="space-y-3 text-xs">
+          <div class="p-3 rounded-lg bg-[#09090b] border border-[#27272a]">
+            <div class="font-bold text-emerald-400">1. Individual Login & Scrypt Password Hashing</div>
+            <p class="text-zinc-400 text-[11px] mt-1">Each tenant has their own credentials. Passwords are salted and hashed via Node's native <code>crypto.scryptSync</code>. No plaintext storage.</p>
+          </div>
+
+          <div class="p-3 rounded-lg bg-[#09090b] border border-[#27272a]">
+            <div class="font-bold text-emerald-400">2. AES-256-GCM Credential Vault</div>
+            <p class="text-zinc-400 text-[11px] mt-1">Robinhood API bearer tokens, account numbers, and Groq keys are encrypted with an authenticated 256-bit cipher. Tokens are decrypted only in memory during active RPCs.</p>
+          </div>
+
+          <div class="p-3 rounded-lg bg-[#09090b] border border-[#27272a]">
+            <div class="font-bold text-emerald-400">3. Cloud Postgres / Encrypted S3 Sync</div>
+            <p class="text-zinc-400 text-[11px] mt-1">Trades and user settings are automatically backed up to SSL-enforced cloud databases (Supabase / Neon / S3) with point-in-time recovery.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-[#18181b] border border-[#27272a] rounded-xl p-5">
+        <h2 class="font-bold text-sm text-white mb-1">Your Account Credentials & Vault</h2>
+        <p class="text-xs text-zinc-400 mb-4">Manage your Robinhood connection and circuit breakers.</p>
+
+        <div class="space-y-3 text-xs">
+          <div>
+            <label class="block font-semibold mb-1 text-zinc-300">Connected Robinhood Bearer Token</label>
+            <input type="password" value="rh_tok_live_••••••••••••••••••••••••4812" class="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-2 text-zinc-300 font-mono">
+            <span class="text-[10px] text-emerald-400 mt-1 inline-block">✓ Active & Validated via MCP Trading Gateway</span>
+          </div>
+
+          <div>
+            <label class="block font-semibold mb-1 text-zinc-300">Target Brokerage Account ID</label>
+            <input type="text" value="••••4812 (Discovered Agentic Account)" class="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-2 text-zinc-300 font-mono" readonly>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3 pt-2">
+            <div>
+              <label class="block font-semibold mb-1 text-zinc-300">Max Single Trade ($ USD)</label>
+              <input type="number" value="15.00" class="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-2 text-white">
+            </div>
+            <div>
+              <label class="block font-semibold mb-1 text-zinc-300">Min Cash Reserve ($ USD)</label>
+              <input type="number" value="10.00" class="w-full bg-[#09090b] border border-[#27272a] rounded-lg px-3 py-2 text-white">
+            </div>
+          </div>
+
+          <button onclick="alert('Tenant credentials and circuit breaker limits updated successfully!')" class="w-full mt-3 px-4 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-bold rounded-xl transition">
+            Update Personal Vault & Circuit Breakers
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ETF THEMES DATABASE (Synthesized by Grok)
+    const THEMES = {
+      ai_physical_infrastructure: {
+        etfTicker: 'GIGA',
+        fullName: '⚡ Physical AI Infrastructure & Supercomputing',
+        thesis: 'Physical infrastructure bottlenecks (liquid cooling, custom ASICs, optical networking, and foundry capacity) command unmatched pricing power during the AI compute buildout.',
+        tickers: [
+          { symbol: 'VRT', name: 'Vertiv Holdings', subsector: 'Liquid Cooling & Thermals', price: 276.88, rsi: 53.6, prob: 82.6, badge: '🚀 READY: COILING BREAKOUT', score: 90, note: 'Squeeze coiling with strong volume anomaly. Prime candidate.' },
+          { symbol: 'ANET', name: 'Arista Networks', subsector: 'AI Cluster Networking', price: 192.08, rsi: 42.1, prob: 59.3, badge: '🟢 SOLID BUY SETUP', score: 75, note: 'Healthy consolidation pullback with high-throughput 800G catalyst.' },
+          { symbol: 'NVDA', name: 'NVIDIA Corp', subsector: 'GPU Silicon & AI Compute', price: 230.19, rsi: 53.6, prob: 95.3, badge: '🚀 CORE LEADER (HELD)', score: 92, note: 'Our primary winning hold (+7.1%). Breakeven ratchet locked.' },
+          { symbol: 'TSM', name: 'Taiwan Semi', subsector: 'Advanced Foundry', price: 342.10, rsi: 44.1, prob: 66.8, badge: '💎 PRIME OVERSOLD ACCUMULATION', score: 95, note: 'RSI 44 with sole-source 3nm monopoly. Matches INTC win pattern.' },
+          { symbol: 'MU', name: 'Micron Technology', subsector: 'HBM Memory Supercycle', price: 188.40, rsi: 58.2, prob: 61.2, badge: '🟢 SOLID BUY SETUP', score: 72, note: 'HBM3E sold out. Good entry above stop floor.' }
+        ]
+      },
+      clean_energy_supergrid: {
+        etfTicker: 'NUKE',
+        fullName: '🔋 Clean Nuclear Baseload & AI Energy Supergrid',
+        thesis: 'Hyperscale AI data centers require 24/7 carbon-free baseload power. Nuclear utilities, uranium producers, and grid transformers capture multi-decade off-take power purchase agreements.',
+        tickers: [
+          { symbol: 'SU', name: 'Schneider Electric', subsector: 'Substations & Energy Automation', price: 68.08, rsi: 51.6, prob: 91.2, badge: '🚀 READY: COILING BREAKOUT', score: 90, note: 'Volatility squeeze coiling with strong volume anomaly.' },
+          { symbol: 'CCJ', name: 'Cameco Corp', subsector: 'Uranium Mining & Fuel', price: 103.64, rsi: 60.8, prob: 94.2, badge: '🟢 HIGH CONVICTION BUY', score: 85, note: 'Uranium structural deficit driving multi-year contract price spikes.' },
+          { symbol: 'CEG', name: 'Constellation Energy', subsector: 'Nuclear Baseload Operator', price: 301.21, rsi: 77.6, badge: '⚠️ OVERBOUGHT (RSI > 70)', prob: 97.7, score: 35, note: 'Journal Warning: RSI 77.6 is elevated. Wait for mean reversion dip.' },
+          { symbol: 'VST', name: 'Vistra Corp', subsector: 'Integrated Nuclear Fleet', price: 153.76, rsi: 69.9, prob: 94.9, badge: '⚖️ EXTENDED / WATCH', score: 55, note: 'RSI near 70 ceiling. High probability but tight risk entry.' },
+          { symbol: 'PWR', name: 'Quanta Services', subsector: 'Supergrid Transmission', price: 312.40, rsi: 48.3, prob: 64.1, badge: '💎 PRIME ACCUMULATION', score: 88, note: 'Grid modernization engineering contractor with healthy base.' }
+        ]
+      },
+      autonomous_defense_cyber: {
+        etfTicker: 'SHLD',
+        fullName: '🛡️ Autonomous Defense & Next-Gen Cyber Dominance',
+        thesis: 'Geopolitical instability and automated cyber attacks require AI-driven defense architectures, sovereign software infrastructure, and autonomous drone capabilities.',
+        tickers: [
+          { symbol: 'CRWD', name: 'CrowdStrike Holdings', subsector: 'Autonomous Endpoint Cyber', price: 212.48, rsi: 48.2, prob: 84.6, badge: '🚀 READY: COILING BREAKOUT', score: 90, note: 'Falcon platform retention remains unmatched. Squeeze coiling.' },
+          { symbol: 'PLTR', name: 'Palantir Technologies', subsector: 'Defense AI Operating System', price: 92.15, rsi: 56.4, prob: 78.9, badge: '🟢 HIGH CONVICTION BUY', score: 82, note: 'AIP Department of Defense contract expansion acceleration.' },
+          { symbol: 'PANW', name: 'Palo Alto Networks', subsector: 'Platform Cyber Architecture', price: 382.50, rsi: 43.8, prob: 68.2, badge: '💎 PRIME OVERSOLD ACCUMULATION', score: 92, note: 'RSI 43 indicates prime entry point for platformization transition.' },
+          { symbol: 'AVAV', name: 'AeroVironment', subsector: 'Loitering Munitions & Drones', price: 215.10, rsi: 52.0, prob: 63.4, badge: '🟢 SOLID BUY SETUP', score: 75, note: 'Tactical unmanned combat systems demand growth.' }
+        ]
+      },
+      space_quantum_frontier: {
+        etfTicker: 'ORBT',
+        fullName: '🚀 Space Economy & Quantum Compute',
+        thesis: 'Commercial orbital launches, satellite direct-to-cell constellations, and post-silicon quantum encryption represent the next frontier of sovereign technological advantage.',
+        tickers: [
+          { symbol: 'RKLB', name: 'Rocket Lab USA', subsector: 'Launch & Space Systems', price: 22.40, rsi: 46.5, prob: 71.4, badge: '💎 PRIME ACCUMULATION', score: 89, note: 'Neutron launch vehicle progress with healthy oversold base.' },
+          { symbol: 'ASTS', name: 'AST SpaceMobile', subsector: 'Space-Based Cellular', price: 28.10, rsi: 54.2, prob: 79.5, badge: '🚀 READY: BREAKOUT SETUP', score: 88, note: 'Commercial orbital broadband direct to standard cellular.' },
+          { symbol: 'QCOM', name: 'Qualcomm Inc', subsector: 'Edge Wireless & Satcom', price: 168.20, rsi: 39.4, prob: 65.0, badge: '💎 PRIME OVERSOLD ACCUMULATION', score: 94, note: 'RSI < 40 deep value anchor with satcom and edge AI drivers.' },
+          { symbol: 'LUNR', name: 'Intuitive Machines', subsector: 'Lunar Logistics & NASA', price: 8.45, rsi: 51.0, prob: 58.0, badge: '⚖️ CONSOLIDATING / WATCHLIST', score: 60, note: 'High volatility spec. Keep on watch for volume anomaly.' }
+        ]
+      },
+      consumer_monopolies_defensive: {
+        etfTicker: 'FORT',
+        fullName: '🛒 Cash Flow Titans & Consumer Moats',
+        thesis: 'Recession-resistant consumer retail tech, dividend compounders, and inelastic pricing power anchor portfolios against volatility and supply shocks.',
+        tickers: [
+          { symbol: 'COST', name: 'Costco Wholesale', subsector: 'Membership Retail Monopoly', price: 912.00, rsi: 48.0, prob: 68.0, badge: '🟢 SOLID BUY SETUP', score: 80, note: '90%+ renewal rates provide rock-solid cash flow.' },
+          { symbol: 'WMT', name: 'Walmart Inc', subsector: 'Retail Tech & Grocery Moat', price: 107.17, rsi: 36.3, prob: 3.8, badge: '⚠️ STAGNANT (ROTATE OUT)', score: 30, note: 'Capital is tied up in low volatility channel. Recommend rotating.' },
+          { symbol: 'KO', name: 'Coca-Cola Co', subsector: 'Global Inelastic Pricing', price: 69.40, rsi: 42.1, prob: 45.0, badge: '⚖️ DEFENSIVE ANCHOR', score: 65, note: 'Low beta dividend compounder.' }
+        ]
+      }
+    };
+
+    let activeThemeKey = 'ai_physical_infrastructure';
+
+    function loadEtfTheme(themeKey) {
+      activeThemeKey = themeKey;
+      const theme = THEMES[themeKey];
+      if (!theme) return;
+
+      // Update Header & Thesis
+      document.getElementById('etfBadgeTitle').innerText = theme.etfTicker;
+      document.getElementById('etfFullName').innerText = theme.fullName;
+      document.getElementById('etfThesisText').innerText = theme.thesis;
+      document.getElementById('etfCountLabel').innerText = `${theme.tickers.length} Constituent Tickers`;
+
+      // Update Tab button active styles
+      const themeBtns = ['ai', 'energy', 'cyber', 'space', 'fort'];
+      const keyMap = {
+        ai_physical_infrastructure: 'ai',
+        clean_energy_supergrid: 'energy',
+        autonomous_defense_cyber: 'cyber',
+        space_quantum_frontier: 'space',
+        consumer_monopolies_defensive: 'fort'
+      };
+      themeBtns.forEach(b => {
+        const btn = document.getElementById('btn-theme-' + b);
+        if (btn) btn.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#09090b] text-zinc-400 border border-[#27272a] hover:text-white transition';
+      });
+      const activeBtnId = 'btn-theme-' + keyMap[themeKey];
+      const activeBtn = document.getElementById(activeBtnId);
+      if (activeBtn) activeBtn.className = 'px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 transition';
+
+      // Render Table
+      renderEtfTable(theme.tickers);
+    }
+
+    function renderEtfTable(tickers) {
+      const tbody = document.getElementById('etfTableBody');
+      tbody.innerHTML = '';
+
+      tickers.forEach(t => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-zinc-800/50 transition';
+
+        let badgeClass = 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+        if (t.badge.includes('READY') || t.badge.includes('LEADER')) badgeClass = 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30';
+        else if (t.badge.includes('PRIME')) badgeClass = 'bg-purple-500/20 text-purple-400 border-purple-500/30';
+        else if (t.badge.includes('OVERBOUGHT') || t.badge.includes('ROTATE')) badgeClass = 'bg-amber-500/20 text-amber-400 border-amber-500/30';
+
+        tr.innerHTML = `
+          <td class="p-3 font-bold flex items-center gap-2">
+            <span class="text-emerald-400">🔹</span> ${t.symbol} 
+            <span class="text-[10px] text-zinc-400 font-normal">${t.name}</span>
+          </td>
+          <td class="p-3 text-zinc-400">${t.subsector}</td>
+          <td class="p-3 font-semibold">$${t.price.toFixed(2)}</td>
+          <td class="p-3 font-mono ${t.rsi > 70 ? 'text-amber-400 font-bold' : (t.rsi < 45 ? 'text-purple-400 font-bold' : 'text-zinc-300')}">${t.rsi.toFixed(1)}</td>
+          <td class="p-3 font-bold ${t.prob >= 70 ? 'text-emerald-400' : 'text-zinc-300'}">${t.prob}%</td>
+          <td class="p-3">
+            <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${badgeClass} inline-block mb-1">${t.badge}</span>
+            <div class="text-[10px] text-zinc-400 leading-tight">${t.note}</div>
+          </td>
+          <td class="p-3 text-right whitespace-nowrap">
+            <button onclick="executeConstituentBuy('${t.symbol}', ${t.price})" class="px-2.5 py-1 rounded bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs transition">
+              Buy $15
+            </button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function synthesizeCustomTheme() {
+      const inp = document.getElementById('customIndustryInput');
+      const val = inp.value.trim();
+      if (!val) return;
+
+      alert(`⚡ Calling Grok LPU to synthesize custom ETF basket for "${val}"...\n\nAnalyzing US supply chain bottlenecks, monopoly pricing power, and correlating with historical trade journal win patterns.`);
+      
+      // Simulate on-the-fly synthesis
+      THEMES.custom = {
+        etfTicker: 'SYNX',
+        fullName: `Custom: ${val}`,
+        thesis: `Grok thematic index targeting monopoly suppliers and software moats within "${val}". Screened for positive RSI momentum and zero theta drag.`,
+        tickers: [
+          { symbol: 'PLTR', name: 'Palantir Tech', subsector: 'Enterprise AI & Defense', price: 92.15, rsi: 56.4, prob: 84.0, badge: '🚀 READY: COILING BREAKOUT', score: 90, note: 'Grok Top Pick: Structural catalyst acceleration with positive cash flow.' },
+          { symbol: 'VRT', name: 'Vertiv Holdings', subsector: 'Data Center Infrastructure', price: 276.88, rsi: 53.6, prob: 82.6, badge: '🚀 READY: BREAKOUT SETUP', score: 88, note: 'Critical physical hardware supply chain enabler.' },
+          { symbol: 'QCOM', name: 'Qualcomm Inc', subsector: 'Edge Silicon & Connectivity', price: 168.20, rsi: 39.4, prob: 65.0, badge: '💎 PRIME OVERSOLD ACCUMULATION', score: 92, note: 'Deep value multiple with high probability reversal odds.' }
+        ]
+      };
+      loadEtfTheme('custom');
+      inp.value = '';
+    }
+
+    function executeConstituentBuy(symbol, price) {
+      if (confirm(`Execute $15.00 Market Order for ${symbol} on Robinhood?\n\n• Price: $${price.toFixed(2)}\n• Risk Guard: -6% stop-loss floor active\n• Ratchet: +4% breakeven trigger`)) {
+        alert(`✅ Order Dispatched to Robinhood Exchange!\nAccumulated $15.00 of ${symbol}. Flight recorder updated.`);
+      }
+    }
+
+    function executeBasketRebalance() {
+      const theme = THEMES[activeThemeKey];
+      const topPick = theme.tickers.find(t => t.score >= 85) || theme.tickers[0];
+      if (confirm(`Confirm Autonomous Restructure into [${theme.etfTicker}] ${theme.fullName}?\n\n• SELL: Stagnant retail holding WMT ($16.08 proceeds)\n• BUY: Top-rated constituent ${topPick.symbol} ($16.08)\n• REASON: Aligning 100% of capital with active thematic ETF index mandate.`)) {
+        alert(`✅ Tactical Restructure Executed on Robinhood!\nWMT liquidated and ${topPick.symbol} accumulated. Active thematic ETF mandate now locked to ${theme.etfTicker}.`);
+      }
+    }
+
+    // TAB SWITCHING
+    function setTab(tabName) {
+      const tabs = ['etf', 'holdings', 'radar', 'pilot', 'security'];
+      tabs.forEach(t => {
+        const el = document.getElementById('tab-' + t);
+        if (el) el.classList.add('hidden');
+        const btn = document.getElementById('tabBtn-' + t);
+        if (btn) btn.className = 'px-4 py-2 rounded-xl text-xs font-medium bg-[#18181b] text-zinc-400 hover:text-white transition';
+      });
+      const activeEl = document.getElementById('tab-' + tabName);
+      if (activeEl) activeEl.classList.remove('hidden');
+      const activeBtn = document.getElementById('tabBtn-' + tabName);
+      if (activeBtn) activeBtn.className = 'px-4 py-2 rounded-xl text-xs font-semibold bg-emerald-500 text-black shadow-sm transition';
+    }
+
+    // USER SWITCHING
+    function switchUser(userKey) {
+      if (userKey === 'dylan') {
+        document.getElementById('userNameDisplay').innerText = 'Dylan (Active Session)';
+        document.getElementById('userAvatar').innerText = 'DY';
+        document.getElementById('userSubText').innerText = 'Robinhood: ••••4812 • Target ETF: GIGA (Physical AI)';
+        document.getElementById('valTotal').innerText = '$116.48';
+        document.getElementById('valCash').innerText = '$14.20';
+        loadEtfTheme('ai_physical_infrastructure');
+      } else if (userKey === 'friend') {
+        document.getElementById('userNameDisplay').innerText = 'Jordan (Friend - Isolated Session)';
+        document.getElementById('userAvatar').innerText = 'JO';
+        document.getElementById('userSubText').innerText = 'Robinhood: ••••9931 • Target ETF: NUKE (Clean Energy)';
+        document.getElementById('valTotal').innerText = '$842.10';
+        document.getElementById('valCash').innerText = '$125.00';
+        loadEtfTheme('clean_energy_supergrid');
+      } else {
+        alert('Adding New Tenant: Each user receives their own isolated encrypted vault and personalized dashboard.');
+      }
+    }
+
+    function sendChatMessage() {
+      const inp = document.getElementById('chatInput');
+      const q = inp.value.trim();
+      if (!q) return;
+      
+      const feed = document.getElementById('chatFeed');
+      const userMsg = document.createElement('div');
+      userMsg.className = 'bg-zinc-800 p-2.5 rounded-xl text-right font-medium text-white';
+      userMsg.innerText = q;
+      feed.appendChild(userMsg);
+      inp.value = '';
+
+      setTimeout(() => {
+        const robMsg = document.createElement('div');
+        robMsg.className = 'bg-[#09090b] p-3 rounded-xl border border-[#27272a]';
+        
+        let reply = "Analyzing market telemetry against our trade journal... Both RSI and momentum parameters have been verified.";
+        const lower = q.toLowerCase();
+        if (lower.includes('etf') || lower.includes('industry') || lower.includes('basket')) {
+          reply = `I have synthesized the custom index for our target industry. Constituent tickers are graded by supply-chain moats and filtered against overbought RSI levels to prevent stop liquidations.`;
+        } else if (lower.includes('restructure') || lower.includes('rebalance')) {
+          reply = "I recommend pruning non-conforming assets and channeling cash into our top-rated breakout constituent. Stop floors and ratchets are already staged.";
+        }
+
+        robMsg.innerHTML = `<div class="font-bold text-emerald-400 mb-1">🤖 Rob (AI Pilot)</div><p class="text-zinc-300 leading-relaxed">${reply}</p>`;
+        feed.appendChild(robMsg);
+        feed.scrollTop = feed.scrollHeight;
+      }, 400);
+    }
+
+    // Initialize with default theme
+    loadEtfTheme('ai_physical_infrastructure');
+  </script>
+</body>
+</html>
